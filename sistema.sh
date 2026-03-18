@@ -7,10 +7,10 @@ termux-wake-lock
 PASO1_BASE=".sistema_base_ok"
 PASO2_MOTOR=".motor_ia_ok"
 
-echo "🤖 [SISTEMA] Cargando Motor de Gestión Metal 2026 (Versión Programada)..."
+echo "🤖 [SISTEMA] Cargando Motor de Gestión con Filtro de Tracks..."
 
 # ==========================================
-# PASO 1: CIMENTACIÓN (BLINDADO) [cite: 1-3]
+# PASO 1: CIMENTACIÓN (BLINDADO) [cite: 15-17]
 # ==========================================
 if [ -f "$PASO1_BASE" ];
 then
@@ -23,7 +23,7 @@ else
 fi
 
 # ==========================================
-# PASO 2: MOTOR DE EJECUCIÓN (BLINDADO) [cite: 4-5]
+# PASO 2: MOTOR DE EJECUCIÓN (BLINDADO) [cite: 18-19]
 # ==========================================
 if [ -f "$PASO2_MOTOR" ];
 then
@@ -37,7 +37,7 @@ else
 fi
 
 # ==========================================
-# PASO 3: MOTOR DE IA Y AGENDA (IMPLEMENTACIÓN)
+# PASO 3: MOTOR DE IA Y AGENDA (IMPLEMENTACIÓN FINAL)
 # ==========================================
 cat << 'EOF' > index.js
 const { 
@@ -75,18 +75,17 @@ function limpiarHorario(datoGoogle) {
     return match ? match[1] : null;
 }
 
-// --- VALIDACIÓN DE VIDEO Y BÚSQUEDA DE PORTADA ---
-async function verificarVideo(url) {
+// --- BÚSQUEDA DINÁMICA DE IMAGEN (SIN ARCHIVOS BASURA) ---
+async function obtenerPortadaDinamica(banda) {
     try {
-        const res = await axios.get(url);
-        return !res.data.includes("videoIsUnavailable");
-    } catch { return false; }
-}
-
-async function obtenerPortada(banda, album) {
-    console.log(`🖼️ Buscando portada para: ${banda} - ${album}...`);
-    // Simulación de búsqueda de imagen profesional
-    return "https://m.media-amazon.com/images/I/81O57f-C6rL._SL1500_.jpg"; 
+        const query = encodeURIComponent(`${banda} album cover art`);
+        const searchUrl = `https://www.google.com/search?q=${query}&tbm=isch`;
+        const { data } = await axios.get(searchUrl, { 
+            headers: { 'User-Agent': 'Mozilla/5.0' } 
+        });
+        const link = data.match(/src="(https:\/\/encrypted-tbn0\.gstatic\.com\/images\?q=[^"]+)"/);
+        return link ? link[1] : null;
+    } catch { return null; }
 }
 
 async function investigarBandaPro(noticia) {
@@ -109,7 +108,7 @@ async function sincronizarYProgramar(sock) {
         const agenda = data.map(item => ({ ...item, horarioLimpio: limpiarHorario(item.horario) }));
         fs.writeFileSync(LOCAL_DB, JSON.stringify(agenda));
 
-        // Programación de alarmas (Scheduler) para ahorro de batería
+        // Programación de alarmas exactas (Scheduler)
         agenda.forEach(item => {
             if (item.horarioLimpio) {
                 const [hora, min] = item.horarioLimpio.split(":");
@@ -122,28 +121,20 @@ async function sincronizarYProgramar(sock) {
 
 async function dispararPublicacion(sock, noticia, esPrueba = false) {
     const config = obtenerConfig();
-    
-    // Verificación de video antes de postear
-    const videoOk = await verificarVideo(noticia.youtube);
-    if (!videoOk && !esPrueba) {
-        console.log(`⚠️ Video no disponible: ${noticia.banda}.`);
-        return; 
-    }
-
     const info = await investigarBandaPro(noticia);
-    const portadaUrl = await obtenerPortada(noticia.banda, "Album");
+    const portadaUrl = await obtenerPortadaDinamica(noticia.banda);
 
     const caption = `🎸 *${esPrueba ? 'PRUEBA DE DEBUT' : 'NUEVO LANZAMIENTO'}* 🤘\n\n` +
                    `📢 *Disco:* ${noticia.banda}\n` +
                    `🌎 *Origen:* ${info.pais}\n` +
-                   `📜 *Historia:* ${info.history || info.historia}${info.tracksFormatted}\n\n` +
+                   `📜 *Historia:* ${info.historia}${info.tracksFormatted}\n\n` +
                    `🔗 *Video:* ${noticia.youtube}`;
 
-    // Envío con imagen de portada y pie de foto (caption)
-    await sock.sendMessage(config.idCanal, { 
-        image: { url: portadaUrl }, 
-        caption: caption 
-    });
+    if (portadaUrl) {
+        await sock.sendMessage(config.idCanal, { image: { url: portadaUrl }, caption: caption });
+    } else {
+        await sock.sendMessage(config.idCanal, { text: caption });
+    }
 }
 
 async function iniciarConexion() {
@@ -168,9 +159,11 @@ async function iniciarConexion() {
             let config = obtenerConfig();
             if (!config.idCanal) {
                 const link = await question("👉 Pega el link de invitación o ID del Canal: ");
-                // Extracción local del ID del canal
-                const idMatch = link.match(/chat\.whatsapp\.com\/([a-zA-Z0-9]+)/) || [null, link];
-                guardarConfig({ idCanal: idMatch[1] || link.trim() });
+                // Extracción del ID alfanumérico desde la liga del canal
+                const idMatch = link.match(/channel\/([a-zA-Z0-9]+)/) || link.match(/chat\.whatsapp\.com\/([a-zA-Z0-9]+)/) || [null, link];
+                const idFinal = idMatch[1] || link.trim();
+                console.log(`✅ ID Extraído: ${idFinal}`);
+                guardarConfig({ idCanal: idFinal });
             }
             if (!config.urlGoogle) {
                 const url = await question("👉 Pega la URL de tu App Script: ");
@@ -180,10 +173,8 @@ async function iniciarConexion() {
             config = obtenerConfig();
             await sincronizarYProgramar(sock);
 
-            // Prueba de debut al instalar
             if (config.esPrimeraVez) {
-                const agendaRaw = fs.readFileSync(LOCAL_DB);
-                const agenda = JSON.parse(agendaRaw);
+                const agenda = JSON.parse(fs.readFileSync(LOCAL_DB));
                 if (agenda.length > 0) await dispararPublicacion(sock, agenda[0], true);
                 guardarConfig({ esPrimeraVez: false });
             }
