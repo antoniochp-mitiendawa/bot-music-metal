@@ -37,7 +37,7 @@ else
 fi
 
 # ==========================================
-# PASO 3: INDEX.JS (CONECTOR + NOTICIERO INTEGRADO)
+# PASO 3: INDEX.JS (MOTOR MULTIFUENTE + LOGS)
 # ==========================================
 cat << 'EOF' > index.js
 const { 
@@ -61,15 +61,14 @@ let sock;
 const DB_PATH = "./datos_ia/enviados.json";
 const CONFIG_PATH = "./datos_ia/config.json";
 
-// --- CONFIGURACIÓN DE DISFRAZ (ANTI-BOT) ---
-const HEADERS_ANDROID = {
-    'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-    'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
-    'Referer': 'https://www.google.com/'
-};
+// --- ESCENARIOS DE IDENTIDAD (ROTACIÓN) ---
+const ESCENARIOS = [
+    { name: "Android 14 (Pixel 8)", ua: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36' },
+    { name: "Windows 11 (Edge)", ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0' },
+    { name: "macOS (Safari)", ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15' },
+    { name: "Linux (Firefox)", ua: 'Mozilla/5.0 (X11; Linux x86_64; rv:122.0) Gecko/20100101 Firefox/122.0' }
+];
 
-// --- FUNCIONES DE PERSISTENCIA DE DATOS ---
 function cargarEnviados() {
     if (!fs.existsSync(DB_PATH)) return [];
     try { return JSON.parse(fs.readFileSync(DB_PATH)); } catch { return []; }
@@ -92,57 +91,61 @@ function guardarConfig(data) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...actual, ...data }));
 }
 
-// --- EXTRACTOR INTELIGENTE MULTIFUENTE ---
-async function extraerNoticia(url) {
-    try {
-        const { data } = await axios.get(url, { headers: HEADERS_ANDROID, timeout: 15000 });
-        const $ = cheerio.load(data);
-        const post = $("article, .post, .torrent-box").first();
-        
-        let tituloRaw = post.find("h2, .entry-title, .title").first().text().trim();
-        let tituloLimpio = tituloRaw.replace(/\[.*?\]|\(.*?\)|320\s?kbps|\.rar/gi, "").trim();
+// --- EXTRACTOR CON LOGS Y ROTACIÓN ---
+async function extraerConIdentidad(url) {
+    for (const esc of ESCENARIOS) {
+        console.log(`📡 Probando escenario: ${esc.name}...`);
+        try {
+            const { data } = await axios.get(url, { 
+                headers: { 'User-Agent': esc.ua, 'Referer': 'https://www.google.com/' }, 
+                timeout: 10000 
+            });
+            const $ = cheerio.load(data);
+            const post = $("article, .post, .torrent-box, .entry").first();
+            let tituloRaw = post.find("h2, .title, .entry-title").first().text().trim();
+            let tituloLimpio = tituloRaw.replace(/\[.*?\]|\(.*?\)|320kbps/gi, "").trim();
 
-        if (!tituloLimpio || cargarEnviados().includes(tituloLimpio)) return null;
-
-        // Intento de extraer tracklist
-        let tracks = post.find("ul li, .tracklist, .songs").map((i, el) => $(el).text().trim()).get().slice(0, 10);
-        let listaTracks = tracks.length > 0 ? "\n\n📋 *TRACKLIST:*\n" + tracks.map(t => `🔹 ${t}`).join("\n") : "";
-
-        const queryYT = tituloLimpio.replace(/\s+/g, "+");
-        const youtube = `https://www.youtube.com/results?search_query=${queryYT}+2026`;
-
-        const emojis = ["🎸", "🤘", "🔊", "💿", "⛓️", "💀", "🔥"];
-        const emo = () => emojis[Math.floor(Math.random() * emojis.length)];
-
-        return {
-            texto: `${emo()} *NUEVO LANZAMIENTO 2026* ${emo()}\n\n📢 *Artista/Disco:* ${tituloLimpio}${listaTracks}\n\n🔗 *Escuchar:* ${youtube}`,
-            titulo: tituloLimpio
-        };
-    } catch (e) {
-        return null;
+            if (tituloLimpio && !cargarEnviados().includes(tituloLimpio)) {
+                let tracks = post.find("ul li, .tracklist").map((i, el) => $(el).text().trim()).get().slice(0, 10);
+                let lista = tracks.length > 0 ? "\n\n📋 *TRACKLIST:*\n" + tracks.map(t => `🔹 ${t}`).join("\n") : "";
+                const yt = `https://www.youtube.com/results?search_query=${tituloLimpio.replace(/\s+/g, "+")}+2026`;
+                
+                return { 
+                    texto: `🎸 *NUEVO LANZAMIENTO 2026* 🤘\n\n📢 *Disco:* ${tituloLimpio}${lista}\n\n🔗 *Escuchar:* ${yt}`, 
+                    titulo: tituloLimpio 
+                };
+            }
+        } catch (e) {
+            console.log(`⚠️ Escenario ${esc.name} bloqueado o fallido.`);
+        }
+        await delay(2000);
     }
+    return null;
 }
 
-// --- FUNCIÓN DE ENVÍO CENTRALIZADA ---
-async function ejecutarEnvio(idCanal, urlPrincipal) {
-    console.log("🔍 Buscando novedades 2026...");
+async function ejecutarSistema(idCanal, urlPrincipal) {
+    console.log("🔍 [LOG] Iniciando búsqueda de noticias...");
     
-    // Intento 1: URL Principal (con disfraz)
-    let noticia = await extraerNoticia(urlPrincipal);
-    
-    // Intento 2: Respaldo Automático (Metal-Tracker 2026)
-    if (!noticia) {
-        console.log("⚠️ Opción 1 bloqueada o sin cambios. Intentando Respaldo...");
-        noticia = await extraerNoticia("https://metal-tracker.com/torrents/search.html?year=2026");
+    const fuentes = [
+        { nombre: "Fuente Inicial (Tag 2026)", url: urlPrincipal },
+        { nombre: "Metal-Tracker", url: "https://metal-tracker.com/torrents/search.html?year=2026" },
+        { nombre: "Metal Kingdom", url: "https://metalkingdom.net/albums/2026" },
+        { nombre: "New Album Releases", url: "https://newalbumreleases.net/category/metal/" }
+    ];
+
+    for (const f of fuentes) {
+        console.log(`🌐 Conectando a: ${f.nombre}...`);
+        let noticia = await extraerConIdentidad(f.url);
+        if (noticia) {
+            console.log(`✅ Noticia encontrada en ${f.nombre}.`);
+            await sock.sendMessage(idCanal, { text: noticia.texto });
+            guardarEnviado(noticia.titulo);
+            return;
+        }
+        console.log(`❌ Sin novedades en ${f.nombre}.`);
     }
 
-    if (noticia) {
-        console.log("📤 Enviando noticia nueva...");
-        await sock.sendMessage(idCanal, { text: noticia.texto });
-        guardarEnviado(noticia.titulo);
-    } else {
-        console.log("ℹ️ No hay noticias nuevas para enviar en este momento.");
-    }
+    console.log("ℹ️ Ciclo completado. No se encontraron nuevas noticias.");
 }
 
 async function iniciarConexion() {
@@ -154,97 +157,56 @@ async function iniciarConexion() {
         logger: pino({ level: "silent" }),
         printQRInTerminal: false,
         auth: state,
-        browser: ["Ubuntu", "Chrome", "20.0.04"],
-        connectTimeoutMs: 60000,
-        keepAliveIntervalMs: 10000
+        browser: ["Ubuntu", "Chrome", "20.0.04"]
     });
 
     sock.ev.on("connection.update", async (update) => {
         const { connection, lastDisconnect } = update;
-
         if (connection === "close") {
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
-            if (sock.authState.creds.registered && statusCode !== DisconnectReason.loggedOut) {
+            if (sock.authState.creds.registered && lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) {
                 iniciarConexion();
             }
-        } 
-        else if (connection === "open") {
+        } else if (connection === "open") {
             console.log("\n✅ ¡CONEXIÓN EXITOSA! WhatsApp vinculado.");
-            
             let config = obtenerConfig();
-            
-            // Configuración de ID de Canal
+
             if (!config?.idCanal) {
-                console.log("\n📍 CONFIGURACIÓN PENDIENTE");
-                const id = await question("👉 Pega el ID del Canal detectado (@newsletter): ");
+                const id = await question("👉 Pega el ID del Canal (@newsletter): ");
                 if (id.trim().includes("@newsletter")) {
                     guardarConfig({ idCanal: id.trim() });
                     config = obtenerConfig();
-                    console.log("✅ ID Guardado.");
                 }
             }
-
-            // Configuración de URL con Tag 2026
             if (!config?.urlInicial) {
-                const url = await question("👉 Pega la URL inicial con el Tag 2026: ");
+                const url = await question("👉 Pega la URL inicial (Tag 2026): ");
                 if (url.trim()) {
                     guardarConfig({ urlInicial: url.trim() });
                     config = obtenerConfig();
-                    console.log("✅ URL Guardada.");
                 }
             }
 
-            console.log("📌 Sistema activo monitoreando: " + config?.idCanal);
+            // --- MENSAJE DE VERIFICACIÓN BAILEYS ---
+            console.log("🚀 Enviando verificación de conexión...");
+            await sock.sendMessage(config.idCanal, { text: "🤖 *Sistema de Noticias en línea*\n\nVerificación de conexión con Baileys: OK.\nBuscando lanzamientos 2026..." });
+            
+            await ejecutarSistema(config.idCanal, config.urlInicial);
 
-            // --- SINCRONIZACIÓN: PRIMER ENVÍO INMEDIATO ---
-            if (config?.idCanal && config?.urlInicial) {
-                console.log("🚀 Ejecutando envío inicial de prueba...");
-                await ejecutarEnvio(config.idCanal, config.urlInicial);
-            }
-
-            // --- PROGRAMACIÓN: HORARIOS ESPECÍFICOS (10 AM, 3 PM, 9 PM) ---
             cron.schedule('0 10,15,21 * * *', async () => {
-                if (config?.idCanal && config?.urlInicial) {
-                    console.log("⏰ Horario programado alcanzado. Revisando noticias...");
-                    await ejecutarEnvio(config.idCanal, config.urlInicial);
-                }
+                await ejecutarSistema(config.idCanal, config.urlInicial);
             }, { timezone: "America/Mexico_City" });
         }
     });
 
-    sock.ev.on("messages.upsert", async (m) => {
-        const msg = m.messages[0];
-        if (!msg.message) return;
-        if (msg.key.remoteJid.includes("@newsletter")) {
-            console.log("\n📢 ID DEL CANAL DETECTADO: " + msg.key.remoteJid);
-        }
-    });
-
     if (!sock.authState.creds.registered) {
-        console.log("\n⏳ Sincronizando con los servidores de WhatsApp...");
-        await delay(8000); 
-
-        console.log("\n------------------------------------------------");
-        console.log("📱 CONFIGURACIÓN DE EMPAREJAMIENTO");
-        console.log("------------------------------------------------");
-        
-        const numero = await question("👉 Introduce tu número de WhatsApp (ej: 521XXXXXXXXXX): ");
+        await delay(5000);
+        const numero = await question("👉 Introduce tu número de WhatsApp: ");
         if (numero.trim()) {
-            try {
-                await delay(2000);
-                const codigo = await sock.requestPairingCode(numero.trim());
-                console.log(`\n🔑 TU CÓDIGO DE VINCULACIÓN ES: ${codigo}`);
-                console.log("Introduce este código en la notificación de tu teléfono.");
-                console.log("------------------------------------------------\n");
-            } catch (error) {
-                console.log("\n❌ Error al generar el código.");
-            }
+            const codigo = await sock.requestPairingCode(numero.trim());
+            console.log(`\n🔑 CÓDIGO DE VINCULACIÓN: ${codigo}`);
         }
     }
-
     sock.ev.on("creds.update", saveCreds);
 }
-
 iniciarConexion();
 EOF
 
