@@ -1,5 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
+# Activar persistencia para que Termux no se detenga en segundo plano
+termux-wake-lock
+
 # --- CHECKPOINTS (PROHIBIDO MODIFICAR 1 Y 2 - BLINDADO) ---
 PASO1_BASE=".sistema_base_ok"
 PASO2_MOTOR=".motor_ia_ok"
@@ -42,9 +45,7 @@ const {
     useMultiFileAuthState, 
     delay, 
     fetchLatestBaileysVersion, 
-    DisconnectReason,
-    generateWAMessageFromContent,
-    prepareWAMessageMedia
+    DisconnectReason 
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const readline = require("readline");
@@ -60,23 +61,22 @@ let sock;
 const DB_PATH = "./datos_ia/enviados.json";
 const CONFIG_PATH = "./datos_ia/config.json";
 
-// --- BASE DE DATOS DE ENVIADOS ---
+// --- FUNCIONES DE PERSISTENCIA DE DATOS ---
 function cargarEnviados() {
     if (!fs.existsSync(DB_PATH)) return [];
-    return JSON.parse(fs.readFileSync(DB_PATH));
+    try { return JSON.parse(fs.readFileSync(DB_PATH)); } catch { return []; }
 }
 
 function guardarEnviado(titulo) {
     const enviados = cargarEnviados();
     enviados.push(titulo);
-    if (enviados.length > 50) enviados.shift(); // Mantener limpia la DB
+    if (enviados.length > 50) enviados.shift();
     fs.writeFileSync(DB_PATH, JSON.stringify(enviados));
 }
 
-// --- CONFIGURACIÓN DE DESTINO (ID) ---
 function obtenerConfig() {
     if (!fs.existsSync(CONFIG_PATH)) return null;
-    return JSON.parse(fs.readFileSync(CONFIG_PATH));
+    try { return JSON.parse(fs.readFileSync(CONFIG_PATH)); } catch { return null; }
 }
 
 function guardarConfig(idCanal) {
@@ -88,6 +88,7 @@ async function obtenerNoticiaMusica() {
     try {
         const { data } = await axios.get("https://getmetal.club/");
         const $ = cheerio.load(data);
+        
         const post = $("article").first();
         let tituloRaw = post.find("h2.entry-title").text().trim();
         
@@ -106,12 +107,23 @@ async function obtenerNoticiaMusica() {
 
         return {
             texto: `🎸 *NUEVO LANZAMIENTO* 🎸\n\n📢 *Disco:* ${tituloLimpio}\n\n🔗 *Escuchar/Video:* ${enlaceYouTube}`,
-            titulo: tituloLimpio,
-            url: enlaceYouTube
+            titulo: tituloLimpio
         };
     } catch (e) {
         console.log("❌ Error al extraer noticias.");
         return null;
+    }
+}
+
+// --- FUNCIÓN DE ENVÍO CENTRALIZADA ---
+async function ejecutarEnvio(idCanal) {
+    const noticia = await obtenerNoticiaMusica();
+    if (noticia) {
+        console.log("📤 Enviando noticia nueva...");
+        await sock.sendMessage(idCanal, { text: noticia.texto });
+        guardarEnviado(noticia.titulo);
+    } else {
+        console.log("ℹ️ No hay noticias nuevas para enviar en este momento.");
     }
 }
 
@@ -139,62 +151,73 @@ async function iniciarConexion() {
             }
         } 
         else if (connection === "open") {
-            console.log("\n✅ ¡CONEXIÓN EXITOSA!");
+            console.log("\n✅ ¡CONEXIÓN EXITOSA! WhatsApp vinculado.");
             
             let config = obtenerConfig();
             if (!config) {
                 console.log("\n📍 CONFIGURACIÓN PENDIENTE");
                 const id = await question("👉 Pega el ID del Canal detectado (@newsletter): ");
-                if (id.includes("@newsletter")) {
+                if (id.trim().includes("@newsletter")) {
                     guardarConfig(id.trim());
                     config = { idCanal: id.trim() };
                     console.log("✅ ID Guardado permanentemente.");
                 }
             }
 
-            console.log(`📌 Monitoreando para el canal: ${config?.idCanal}`);
+            console.log("📌 El sistema de noticias está activo y monitoreando.");
+            console.log(`📌 Canal destino: ${config?.idCanal}`);
 
-            cron.schedule('0 */3 * * *', async () => {
-                const noticia = await obtenerNoticiaMusica();
-                if (noticia && config) {
-                    console.log("📤 Enviando noticia con vista previa...");
-                    await sock.sendMessage(config.idCanal, { 
-                        text: noticia.texto,
-                        linkPreview: true 
-                    });
-                    guardarEnviado(noticia.titulo);
+            // --- SINCRONIZACIÓN: PRIMER ENVÍO INMEDIATO ---
+            if (config) {
+                console.log("🚀 Ejecutando envío inicial de prueba...");
+                await ejecutarEnvio(config.idCanal);
+            }
+
+            // --- PROGRAMACIÓN: HORARIOS ESPECÍFICOS (10 AM, 3 PM, 9 PM) ---
+            cron.schedule('0 10,15,21 * * *', async () => {
+                if (config) {
+                    console.log("⏰ Horario programado alcanzado. Revisando noticias...");
+                    await ejecutarEnvio(config.idCanal);
                 }
-            });
+            }, { timezone: "America/Mexico_City" });
         }
     });
 
-    // --- ESCUCHA DE ID (PARA EMERGENCIAS) ---
     sock.ev.on("messages.upsert", async (m) => {
         const msg = m.messages[0];
         if (!msg.message) return;
         if (msg.key.remoteJid.includes("@newsletter")) {
-            console.log("\n📢 ID DETECTADO EN PANTALLA: " + msg.key.remoteJid);
+            console.log("\n📢 ID DEL CANAL DETECTADO: " + msg.key.remoteJid);
         }
     });
 
     if (!sock.authState.creds.registered) {
-        console.log("\n⏳ Sincronizando con los servidores...");
+        console.log("\n⏳ Sincronizando con los servidores de WhatsApp...");
         await delay(8000); 
-        const numero = await question("👉 Introduce tu número de WhatsApp: ");
+
+        console.log("\n------------------------------------------------");
+        console.log("📱 CONFIGURACIÓN DE EMPAREJAMIENTO");
+        console.log("------------------------------------------------");
+        
+        const numero = await question("👉 Introduce tu número de WhatsApp (ej: 521XXXXXXXXXX): ");
         if (numero.trim()) {
             try {
                 await delay(2000);
                 const codigo = await sock.requestPairingCode(numero.trim());
-                console.log(`\n🔑 TU CÓDIGO DE VINCULACIÓN ES: ${codigo}\n`);
+                console.log(`\n🔑 TU CÓDIGO DE VINCULACIÓN ES: ${codigo}`);
+                console.log("Introduce este código en la notificación de tu teléfono.");
+                console.log("------------------------------------------------\n");
             } catch (error) {
-                console.log("\n❌ Error.");
+                console.log("\n❌ Error al generar el código.");
             }
         }
     }
+
     sock.ev.on("creds.update", saveCreds);
 }
 
 iniciarConexion();
 EOF
 
+# Ejecución
 node index.js
