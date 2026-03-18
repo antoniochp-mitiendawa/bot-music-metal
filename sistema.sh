@@ -35,7 +35,7 @@ else
 fi
 
 # ==========================================
-# PASO 3: MOTOR DE IA Y SINCRONIZACIÓN (EVOLUCIONADO) [cite: 6-33]
+# PASO 3: MOTOR DE IA Y SINCRONIZACIÓN (EVOLUCIONADO) [cite: 6-41]
 # ==========================================
 cat << 'EOF' > index.js
 const { 
@@ -67,14 +67,20 @@ function guardarConfig(data) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...actual, ...data }));
 }
 
-// --- LIMPIADOR DE HORARIO PARA EVITAR ERRORES DE ZONA [cite: 10-11] ---
+// --- SISTEMA SPINTAX PARA VARIEDAD [NUEVA FUNCIONALIDAD] ---
+function aplicarSpintax(texto) {
+    return texto.replace(/\{([^{}]+)\}/g, (match, opciones) => {
+        const lista = opciones.split('|');
+        return lista[Math.floor(Math.random() * lista.length)];
+    });
+}
+
 function limpiarHorario(datoGoogle) {
     if (typeof datoGoogle !== 'string') return null;
     const match = datoGoogle.match(/(\d{2}:\d{2})/);
     return match ? match[1] : null;
 }
 
-// --- INVESTIGACIÓN REAL Y FILTRADO DE IDENTIDAD [cite: 12-13, 19] ---
 async function investigarBandaPro(noticia) {
     console.log(`🔍 Filtrando y validando: ${noticia.banda}...`);
     const databaseMetal = {
@@ -101,10 +107,17 @@ async function sincronizarConGoogle() {
     try {
         const { data } = await axios.get(config.urlGoogle);
         const agendaProcesada = data.map(item => ({
-            ...item,
-            horarioLimpio: limpiarHorario(item.horario)
+            banda: item.banda || item.Banda,
+            youtube: item.youtube || item.Link || item.url,
+            horario: item.horario || item.Horario,
+            tracks: item.tracks || item.Tracks,
+            horarioLimpio: limpiarHorario(item.horario || item.Horario)
         }));
+        
         fs.writeFileSync(LOCAL_DB, JSON.stringify(agendaProcesada));
+        console.log(`📅 Agenda sincronizada: ${agendaProcesada.length} lanzamientos detectados.`);
+        agendaProcesada.forEach(a => console.log(`   ⏰ ${a.horarioLimpio} -> ${a.banda}`));
+        
         return agendaProcesada;
     } catch (e) {
         console.log("❌ Error de sincronización.");
@@ -116,7 +129,9 @@ async function dispararPublicacion(sock, noticia, esPrueba = false) {
     const config = obtenerConfig();
     const infoExtra = await investigarBandaPro(noticia);
     
-    const mensaje = `🎸 *${esPrueba ? 'PRUEBA DE INSTALACIÓN' : 'NUEVO LANZAMIENTO 2026'}* 🤘\n\n` +
+    const encabezado = esPrueba ? 'PRUEBA DE INSTALACIÓN' : aplicarSpintax('{NUEVO LANZAMIENTO|ESTRENO METALERO|LO ÚLTIMO DEL METAL} 2026');
+    
+    const mensaje = `🎸 *${encabezado}* 🤘\n\n` +
                    `📢 *Disco:* ${noticia.banda}\n` +
                    `🌎 *Origen:* ${infoExtra.pais}\n` +
                    `📜 *Historia:* ${infoExtra.historia}${infoExtra.tracksFormatted}\n\n` +
@@ -152,15 +167,12 @@ async function iniciarConexion() {
             if (!config.idCanal) {
                 const urlCanal = await question("👉 Pega la liga de tu Canal (URL): ");
                 let idLimpio = urlCanal.trim();
-                
-                // Extracción inteligente del ID desde la URL 
                 if (idLimpio.includes("whatsapp.com/channel/")) {
                     idLimpio = idLimpio.split("/").pop() + "@newsletter";
                 } else if (!idLimpio.includes("@")) {
                     idLimpio = idLimpio + "@newsletter";
                 }
-                
-                console.log(`✅ URL detectada. El ID técnico es: ${idLimpio}`);
+                console.log(`✅ URL detectada. ID técnico: ${idLimpio}`);
                 guardarConfig({ idCanal: idLimpio });
             }
 
@@ -172,7 +184,7 @@ async function iniciarConexion() {
             config = obtenerConfig();
             const agenda = await sincronizarConGoogle();
 
-            // --- PRUEBA DE DEBUT (SOLO UNA VEZ AL INSTALAR) --- [cite: 31-32]
+            // --- PRUEBA DE DEBUT RESTAURADA [cite: 31-32, 35] ---
             if (config.esPrimeraVez && agenda && agenda.length > 0) {
                 console.log("🧪 Realizando prueba de formato con datos reales...");
                 await dispararPublicacion(sock, agenda[0], true);
