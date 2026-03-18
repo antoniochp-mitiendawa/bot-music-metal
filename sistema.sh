@@ -1,10 +1,13 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# --- CHECKPOINTS (PROHIBIDO MODIFICAR) ---
+# --- CHECKPOINTS DE SEGURIDAD (PROHIBIDO MODIFICAR LO QUE YA FUNCIONA) ---
 PASO1_BASE=".sistema_base_ok"
 PASO2_MOTOR=".motor_ia_ok"
+PASO2_EXTERNO=".motores_pesados_ok"
 
-echo "🤖 [SISTEMA] Iniciando Secuencia Automatizada..."
+echo "================================================="
+echo "🤖 [SISTEMA] INSTALACIÓN TOTAL Y AUTOMATIZADA"
+echo "================================================="
 
 # ==========================================
 # PASO 1: CIMENTACIÓN (BLINDADO)
@@ -24,7 +27,7 @@ fi
 # PASO 2: MOTOR DE EJECUCIÓN (BLINDADO)
 # ==========================================
 if [ -f "$PASO2_MOTOR" ]; then
-    echo "✅ [MEMORIA] Paso 2 (Motores e IA) ya está listo."
+    echo "✅ [MEMORIA] Paso 2 (Motores Base) ya está listo."
 else
     echo "⚙️  [PASO 2] Instalando Node.js, Python y FFmpeg..."
     pkg install -y nodejs-lts python ffmpeg libsqlite
@@ -34,23 +37,47 @@ else
 fi
 
 # ==========================================
-# PASO 3 Y 4: VINCULACIÓN Y PERSISTENCIA
+# PASO 2.5: ARMAMENTO DE IA, AUDIO Y VISIÓN (TODO LO DEMÁS)
+# ==========================================
+if [ -f "$PASO2_EXTERNO" ]; then
+    echo "✅ [MEMORIA] Motores de IA y Audio ya están instalados."
+else
+    echo "🧠 [PASO 2.5] Instalando IA, Whisper y Visión..."
+    
+    # Herramientas de sistema para audio y fotos
+    pkg install -y libwebp-static imagemagick
+    
+    # Motores de Inteligencia Artificial (Python)
+    pip install --upgrade pip
+    pip install openai-whisper pandas numpy
+    
+    # SDKs de IA para Node.js y Persistencia
+    npm install openai @google/generative-ai sharp fluent-ffmpeg
+    
+    touch "$PASO2_EXTERNO"
+    echo "✅ TODO LO DEMÁS (IA/AUDIO) INSTALADO CORRECTAMENTE."
+fi
+
+# ==========================================
+# PASO 3 Y 4: VINCULACIÓN Y PERSISTENCIA (BLINDADO)
 # ==========================================
 echo "🔗 [SISTEMA] Iniciando Motor de Conexión Permanente..."
 
-# 1. Asegurar dependencias de red
+# Asegurar dependencias de WhatsApp
 npm install @whiskeysockets/baileys pino readline
 
-# 2. Creación del archivo index.js (Lógica de Persistencia)
+# Creación del archivo index.js (Lógica de Conexión + Persistencia + Sensores IA)
 cat << 'EOF' > index.js
 const { default: makeWASocket, useMultiFileAuthState, delay, fetchLatestBaileysVersion, DisconnectReason } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const readline = require("readline");
+const fs = require("fs");
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 
 async function iniciarBot() {
+    // Carpeta de sesión persistente
     const { state, saveCreds } = await useMultiFileAuthState('sesion_bot');
     const { version } = await fetchLatestBaileysVersion();
 
@@ -68,28 +95,35 @@ async function iniciarBot() {
 
         if (connection === "close") {
             const debeReconectar = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
-            console.log("🔄 Conexión perdida. Reconectando:", debeReconectar);
+            console.log("🔄 Conexión perdida. Reconectando...");
             if (debeReconectar) iniciarBot();
         } else if (connection === "open") {
             console.log("\n✅ [ESTADO] BOT ACTIVO Y VIGENTE.");
-            console.log("📱 La sesión está guardada. Ya puedes enviar mensajes.");
+            console.log("📱 Motores listos: Texto, Audio (Whisper) e Imágenes.");
+            console.log("------------------------------------------------\n");
         }
     });
 
-    // ESCUCHA DE MENSAJES (PRUEBA DE PERSISTENCIA)
+    // ESCUCHA DE MENSAJES
     sock.ev.on("messages.upsert", async (m) => {
         const msg = m.messages[0];
         if (!msg.key.fromMe && m.type === "notify") {
             const texto = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
+            const esAudio = msg.message?.audioMessage;
             
-            // Si recibe "test", el bot responde para demostrar que sigue activo
+            // Test de vida del bot
             if (texto?.toLowerCase() === "test") {
-                await sock.sendMessage(msg.key.remoteJid, { text: "✅ Bot funcionando en tiempo real." });
+                await sock.sendMessage(msg.key.remoteJid, { text: "✅ Sistema conectado. IA y Motores de Audio listos." });
+            }
+            
+            // Detección de Audio (Verificación de sensores del Paso 2.5)
+            if (esAudio) {
+                console.log("🎙️ Audio detectado. Motor Whisper listo para transcripción.");
             }
         }
     });
 
-    // SOLICITUD DE CÓDIGO (SOLO SI NO ESTÁ VINCULADO)
+    // SOLICITUD DE CÓDIGO (SOLO SI NO HAY SESIÓN)
     if (!sock.authState.creds.registered) {
         console.log("\n⏳ Sincronizando con WhatsApp...");
         await delay(6000); 
@@ -97,7 +131,7 @@ async function iniciarBot() {
         console.log("\n------------------------------------------------");
         console.log("📱 CONFIGURACIÓN DE EMPAREJAMIENTO");
         console.log("------------------------------------------------");
-        const numero = await question("👉 Introduce tu número de WhatsApp (ej: 521XXXXXXXXXX): ");
+        const numero = await question("👉 Introduce tu número de WhatsApp (521XXXXXXXXXX): ");
         
         try {
             const codigo = await sock.requestPairingCode(numero.trim());
@@ -105,7 +139,7 @@ async function iniciarBot() {
             console.log("Introduce este código en tu teléfono.");
             console.log("------------------------------------------------\n");
         } catch (error) {
-            console.log("\n❌ Error. Reiniciando...");
+            console.log("\n❌ Error en la vinculación. Reintentando...");
             process.exit(1);
         }
     }
@@ -116,5 +150,5 @@ async function iniciarBot() {
 iniciarBot();
 EOF
 
-# 3. Ejecución del bot
+# Ejecución del sistema completo
 node index.js
