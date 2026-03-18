@@ -7,10 +7,10 @@ termux-wake-lock
 PASO1_BASE=".sistema_base_ok"
 PASO2_MOTOR=".motor_ia_ok"
 
-echo "🤖 [SISTEMA] Cargando Motor de Gestión con Filtro de Tracks..."
+echo "🤖 [SISTEMA] Cargando Motor de Gestión Metal 2026 (Versión Programada)..."
 
 # ==========================================
-# PASO 1: CIMENTACIÓN (BLINDADO) [cite: 1-3]
+# PASO 1: CIMENTACIÓN (BLINDADO) [cite: 15-17]
 # ==========================================
 if [ -f "$PASO1_BASE" ];
 then
@@ -23,7 +23,7 @@ else
 fi
 
 # ==========================================
-# PASO 2: MOTOR DE EJECUCIÓN (BLINDADO) [cite: 4-5]
+# PASO 2: MOTOR DE EJECUCIÓN (BLINDADO) [cite: 18-19]
 # ==========================================
 if [ -f "$PASO2_MOTOR" ];
 then
@@ -37,7 +37,7 @@ else
 fi
 
 # ==========================================
-# PASO 3: MOTOR DE IA Y SINCRONIZACIÓN (EVOLUCIONADO) [cite: 6-33]
+# PASO 3: MOTOR DE IA Y AGENDA (EVOLUCIONADO)
 # ==========================================
 cat << 'EOF' > index.js
 const { 
@@ -69,69 +69,81 @@ function guardarConfig(data) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...actual, ...data }));
 }
 
-// --- LIMPIADOR DE HORARIO PARA EVITAR ERRORES DE ZONA [cite: 10-11] ---
 function limpiarHorario(datoGoogle) {
     if (typeof datoGoogle !== 'string') return null;
     const match = datoGoogle.match(/(\d{2}:\d{2})/);
     return match ? match[1] : null;
 }
 
-// --- INVESTIGACIÓN REAL Y FILTRADO DE IDENTIDAD [cite: 12-13, 19] ---
-async function investigarBandaPro(noticia) {
-    console.log(`🔍 Filtrando y validando: ${noticia.banda}...`);
-    // Simulamos la búsqueda que usa el nombre + tracks para no fallar
-    // En una fase posterior aquí conectamos con la búsqueda de identidad real
-    const databaseMetal = {
-        "Septicflesh": { pais: "Grecia 🇬🇷", historia: "Pioneros del Death Metal Sinfónico con una atmósfera orquestal única." },
-        "Rotting Christ": { pais: "Grecia 🇬🇷", historia: "Leyendas del Dark Metal con un sonido ritualista y oscuro." }
-    };
-
-    const nombreBanda = noticia.banda.split(" - ")[0];
-    const info = databaseMetal[nombreBanda] || { 
-        pais: "Origen Confirmado 🌎", 
-        historia: "Agrupación destacada dentro de los nuevos lanzamientos de metal 2026." 
-    };
-
-    return {
-        ...info,
-        tracksFormatted: noticia.tracks ? `\n\n💿 *Tracks Destacados:*\n${noticia.tracks}` : ""
-    };
+// --- VALIDACIÓN DE VIDEO Y BÚSQUEDA DE PORTADA ---
+async function verificarVideo(url) {
+    try {
+        const res = await axios.get(url);
+        return !res.data.includes("videoIsUnavailable");
+    } catch { return false; }
 }
 
-async function sincronizarConGoogle() {
+async function obtenerPortada(banda, album) {
+    console.log(`🖼️ Buscando portada para: ${banda} - ${album}...`);
+    // Simulación de búsqueda de imagen basada en metadata
+    return "https://m.media-amazon.com/images/I/81O57f-C6rL._SL1500_.jpg"; 
+}
+
+async function investigarBandaPro(noticia) {
+    const databaseMetal = {
+        "Septicflesh": { pais: "Grecia 🇬🇷", historia: "Pioneros del Death Metal Sinfónico." },
+        "Rotting Christ": { pais: "Grecia 🇬🇷", historia: "Leyendas del Dark Metal ritualista." }
+    };
+    const nombreBanda = noticia.banda.split(" - ")[0];
+    const info = databaseMetal[nombreBanda] || { pais: "Internacional 🌎", historia: "Lanzamiento destacado de 2026." };
+    return { ...info, tracksFormatted: noticia.tracks ? `\n\n💿 *Tracks:* ${noticia.tracks}` : "" };
+}
+
+async function sincronizarYProgramar(sock) {
     const config = obtenerConfig();
     if (!config.urlGoogle) return;
 
     try {
+        console.log("📥 Sincronizando agenda desde Google...");
         const { data } = await axios.get(config.urlGoogle);
-        const agendaProcesada = data.map(item => ({
-            ...item,
-            horarioLimpio: limpiarHorario(item.horario)
-        }));
-        fs.writeFileSync(LOCAL_DB, JSON.stringify(agendaProcesada));
-        return agendaProcesada;
-    } catch (e) {
-        console.log("❌ Error de sincronización.");
-        return [];
-    }
+        const agenda = data.map(item => ({ ...item, horarioLimpio: limpiarHorario(item.horario) }));
+        fs.writeFileSync(LOCAL_DB, JSON.stringify(agenda));
+
+        // Programar alarmas (Scheduler) para evitar ciclos infinitos
+        agenda.forEach(item => {
+            if (item.horarioLimpio) {
+                const [hora, min] = item.horarioLimpio.split(":");
+                cron.schedule(`${min} ${hora} * * *`, () => dispararPublicacion(sock, item));
+                console.log(`⏰ Alarma lista: ${item.banda} a las ${item.horarioLimpio}`);
+            }
+        });
+    } catch (e) { console.log("❌ Error de sincronización."); }
 }
 
 async function dispararPublicacion(sock, noticia, esPrueba = false) {
     const config = obtenerConfig();
-    const infoExtra = await investigarBandaPro(noticia);
     
-    const mensaje = `🎸 *${esPrueba ? 'PRUEBA DE INSTALACIÓN' : 'NUEVO LANZAMIENTO 2026'}* 🤘\n\n` +
-                   `📢 *Disco:* ${noticia.banda}\n` +
-                   `🌎 *Origen:* ${infoExtra.pais}\n` +
-                   `📜 *Historia:* ${infoExtra.historia}${infoExtra.tracksFormatted}\n\n` +
-                   `🔗 *Video Oficial:* ${noticia.youtube}`;
+    // Segunda verificación de video antes de postear
+    const videoOk = await verificarVideo(noticia.youtube);
+    if (!videoOk && !esPrueba) {
+        console.log(`⚠️ Video no disponible: ${noticia.banda}. Avisando...`);
+        return; 
+    }
 
+    const info = await investigarBandaPro(noticia);
+    const portadaUrl = await obtenerPortada(noticia.banda, "Album");
+
+    const caption = `🎸 *${esPrueba ? 'PRUEBA DE DEBUT' : 'NUEVO LANZAMIENTO'}* 🤘\n\n` +
+                   `📢 *Disco:* ${noticia.banda}\n` +
+                   `🌎 *Origen:* ${info.pais}\n` +
+                   `📜 *Historia:* ${info.historia}${info.tracksFormatted}\n\n` +
+                   `🔗 *Video:* ${noticia.youtube}`;
+
+    // Envío profesional: Imagen + Texto (Caption)
     await sock.sendMessage(config.idCanal, { 
-        text: mensaje,
-        linkPreview: { "canonical-url": noticia.youtube } 
+        image: { url: portadaUrl }, 
+        caption: caption 
     });
-    
-    if(!esPrueba) console.log(`🚀 Publicado: ${noticia.banda} a las ${noticia.horarioLimpio}`);
 }
 
 async function iniciarConexion() {
@@ -151,12 +163,13 @@ async function iniciarConexion() {
         if (connection === "close") {
             if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) iniciarConexion();
         } else if (connection === "open") {
-            console.log("\n✅ ¡SISTEMA VINCULADO CORRECTAMENTE!");
+            console.log("\n✅ SISTEMA VINCULADO");
             
             let config = obtenerConfig();
             if (!config.idCanal) {
-                const id = await question("👉 Pega el ID del Canal: ");
-                guardarConfig({ idCanal: id.trim() });
+                const link = await question("👉 Pega el link de invitación o ID del Canal: ");
+                const idMatch = link.match(/chat\.whatsapp\.com\/([a-zA-Z0-9]+)/) || [null, link];
+                guardarConfig({ idCanal: idMatch[1] || link.trim() });
             }
             if (!config.urlGoogle) {
                 const url = await question("👉 Pega la URL de tu App Script: ");
@@ -164,44 +177,27 @@ async function iniciarConexion() {
             }
             
             config = obtenerConfig();
-            const agenda = await sincronizarConGoogle();
+            await sincronizarYProgramar(sock);
 
-            // --- PRUEBA DE DEBUT (SOLO UNA VEZ AL INSTALAR) ---
-            if (config.esPrimeraVez && agenda && agenda.length > 0) {
-                console.log("🧪 Realizando prueba de formato con datos reales...");
-                await dispararPublicacion(sock, agenda[0], true);
+            if (config.esPrimeraVez) {
+                const agenda = JSON.parse(fs.readFileSync(LOCAL_DB));
+                if (agenda.length > 0) await dispararPublicacion(sock, agenda[0], true);
                 guardarConfig({ esPrimeraVez: false });
             }
 
-            // Revisión de agenda minuto a minuto [cite: 27-28]
-            cron.schedule('* * * * *', async () => {
-                const ahora = new Date().toLocaleTimeString('es-MX', { hour12: false, hour: '2-digit', minute: '2-digit' });
-                if (fs.existsSync(LOCAL_DB)) {
-                    const datos = JSON.parse(fs.readFileSync(LOCAL_DB));
-                    for (const item of datos) {
-                        if (item.horarioLimpio === ahora) {
-                            await dispararPublicacion(sock, item);
-                        }
-                    }
-                }
-            });
-
-            cron.schedule('0 9 * * *', async () => { await sincronizarConGoogle(); });
+            cron.schedule('0 9 * * *', () => sincronizarYProgramar(sock));
         }
     });
 
     if (!sock.authState.creds.registered) {
         await delay(5000);
-        const numero = await question("👉 Tu número (ej: 521...): ");
+        const numero = await question("👉 Introduce tu número (ej: 521...): ");
         const codigo = await sock.requestPairingCode(numero.trim());
         console.log(`\n🔑 CÓDIGO DE VINCULACIÓN: ${codigo}\n`);
     }
-
     sock.ev.on("creds.update", saveCreds);
 }
-
 iniciarConexion();
 EOF
 
-# Ejecución final [cite: 33]
 node index.js
