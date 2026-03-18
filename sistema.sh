@@ -21,22 +21,20 @@ else
 fi
 
 # ==========================================
-# PASO 2: MOTOR DE EJECUCIÓN Y LIBRERÍAS DE NOTICIAS
+# PASO 2: MOTOR DE EJECUCIÓN (NOTICIERO READY)
 # ==========================================
 if [ -f "$PASO2_MOTOR" ]; then
     echo "✅ [MEMORIA] Paso 2 (Motores e IA) ya está listo."
 else
-    echo "⚙️  [PASO 2] Instalando Node.js, Python, FFmpeg y Librerías de Scraper..."
-    # Añadimos libsqlite para la base de datos de historial
+    echo "⚙️  [PASO 2] Instalando Node.js, Python, FFmpeg y Bases de Datos..."
     pkg install -y nodejs-lts python ffmpeg libsqlite
     
-    # Creamos directorios necesarios para el proyecto
     mkdir -p datos_ia
     mkdir -p sesion_bot
 
-    # Instalación de librerías esenciales para Baileys y el futuro Noticiero
-    echo "📦 Instalando módulos de Node.js..."
-    npm install @whiskeysockets/baileys pino qrcode-terminal readline axios cheerio node-cron
+    echo "📦 Instalando módulos de Node.js para WhatsApp y Noticias..."
+    # Instalamos todo de una vez: Baileys + Scrapers + Programador
+    npm install @whiskeysockets/baileys pino axios cheerio node-cron
 
     touch "$PASO2_MOTOR"
     echo "✅ PASO 2 COMPLETADO."
@@ -52,7 +50,7 @@ const {
     default: makeWASocket, 
     useMultiFileAuthState, 
     delay, 
-    makeCacheableSignalKeyStore 
+    DisconnectReason 
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const readline = require("readline");
@@ -65,46 +63,55 @@ async function iniciarConexion() {
 
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: false, // Forzamos código de emparejamiento
+        printQRInTerminal: false,
         logger: pino({ level: "silent" }),
-        browser: ["Ubuntu", "Chrome", "20.0.0"]
+        browser: ["Ubuntu", "Chrome", "20.0.0"],
+        // Optimizaciones para evitar el "Connection Failure" en Termux
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 0,
+        keepAliveIntervalMs: 10000
     });
 
     sock.ev.on("connection.update", async (update) => {
         const { connection, lastDisconnect } = update;
 
         if (connection === "close") {
-            const debeReiniciar = lastDisconnect?.error?.output?.statusCode !== 401;
-            console.log("⚠️ Conexión cerrada. Motivo:", lastDisconnect?.error?.message);
-            if (debeReiniciar) {
-                console.log("🔄 Reiniciando conexión automáticamente...");
-                iniciarConexion();
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            // Solo reiniciamos si no es un cierre por deslogueo manual
+            if (statusCode !== DisconnectReason.loggedOut) {
+                console.log("⚠️ Reajustando señal de red... reintentando en 5 segundos.");
+                setTimeout(() => iniciarConexion(), 5000);
             }
         } else if (connection === "open") {
-            console.log("\n✅ ¡CONEXIÓN EXITOSA! El Noticiero está activo.");
-            console.log("📌 El bot permanecerá encendido esperando tareas programadas.");
-            // ELIMINADO: process.exit(0) para mantener la conexión viva.
+            console.log("\n✅ ¡CONEXIÓN EXITOSA! Noticiero Musical vinculado.");
+            console.log("📌 El bot permanecerá en espera de noticias de getmetal.club...");
+            // Ya no hay process.exit(0), el bot se queda vivo.
         }
     });
 
-    // Proceso de solicitud de código de emparejamiento (Solo si no está registrado)
+    // Proceso de solicitud de código de emparejamiento
     if (!sock.authState.creds.registered) {
         console.log("\n⏳ Sincronizando con los servidores de WhatsApp...");
-        await delay(6000); 
+        // Damos 10 segundos para que la conexión sea sólida antes de pedir el número
+        await delay(10000); 
 
         console.log("\n------------------------------------------------");
         console.log("📱 CONFIGURACIÓN DE EMPAREJAMIENTO");
         console.log("------------------------------------------------");
         const numero = await question("👉 Introduce tu número de WhatsApp (ej: 521XXXXXXXXXX): ");
         
-        try {
-            const codigo = await sock.requestPairingCode(numero.trim());
-            console.log(\`\\n🔑 TU CÓDIGO DE VINCULACIÓN ES: \${codigo}\`);
-            console.log("Introduce este código en la notificación de tu teléfono.");
-            console.log("------------------------------------------------\\n");
-        } catch (error) {
-            console.log("\n❌ Error al generar el código. Reiniciando...");
-            process.exit(1);
+        if (numero.trim()) {
+            try {
+                // Pequeño delay extra para asegurar que el socket no se cierre durante la petición
+                await delay(2000);
+                const codigo = await sock.requestPairingCode(numero.trim());
+                console.log(\`\\n🔑 TU CÓDIGO DE VINCULACIÓN ES: \${codigo}\`);
+                console.log("Introduce este código en la notificación de tu teléfono.");
+                console.log("------------------------------------------------\\n");
+            } catch (error) {
+                console.log("\\n❌ Error al generar el código. Reiniciando módulo...");
+                setTimeout(() => iniciarConexion(), 3000);
+            }
         }
     }
 
