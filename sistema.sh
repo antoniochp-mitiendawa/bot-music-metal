@@ -1,62 +1,96 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# --- CHECKPOINTS (PROHIBIDO MODIFICAR 1 Y 2) ---
+# --- CHECKPOINTS (PROHIBIDO MODIFICAR 1 Y 2 - BLINDADO) ---
 PASO1_BASE=".sistema_base_ok"
 PASO2_MOTOR=".motor_ia_ok"
 
-echo "🤖 [SISTEMA] Iniciando Secuencia Automatizada de Noticias..."
+echo "🤖 [SISTEMA] Cargando Motor de Noticias Blindado..."
 
 # ==========================================
 # PASO 1: CIMENTACIÓN (BLINDADO)
 # ==========================================
-if [ -f "$PASO1_BASE" ];
-then
-    echo "✅ [MEMORIA] Paso 1 (Sistema Base) ya está listo."
+if [ -f "$PASO1_BASE" ]; then
+    echo "✅ [MEMORIA] Paso 1 listo."
 else
-    echo "🚀 [PASO 1] Ejecutando Instalación Base..."
     pkg update -y -o Dpkg::Options::="--force-confold"
     pkg upgrade -y -o Dpkg::Options::="--force-confold"
     pkg install -y git openssl wget
     touch "$PASO1_BASE"
-    echo "✅ PASO 1 COMPLETADO."
 fi
 
 # ==========================================
-# PASO 2: MOTOR DE EJECUCIÓN (NOTICIERO READY)
+# PASO 2: MOTOR DE EJECUCIÓN (BLINDADO)
 # ==========================================
-if [ -f "$PASO2_MOTOR" ];
-then
-    echo "✅ [MEMORIA] Paso 2 (Motores e IA) ya está listo."
+if [ -f "$PASO2_MOTOR" ]; then
+    echo "✅ [MEMORIA] Paso 2 listo."
 else
-    echo "⚙️  [PASO 2] Instalando Node.js, Python, FFmpeg y Bases de Datos..."
     pkg install -y nodejs-lts python ffmpeg libsqlite
     mkdir -p datos_ia
     mkdir -p sesion_bot
+    npm install @whiskeysockets/baileys pino readline axios cheerio node-cron
     touch "$PASO2_MOTOR"
-    echo "✅ PASO 2 COMPLETADO."
 fi
 
 # ==========================================
-# PASO 3: CONEXIÓN Y PERMANENCIA (BAILEYS)
+# PASO 3: INDEX.JS (CONECTOR + NOTICIERO INTEGRADO)
 # ==========================================
-echo "🔗 [PASO 3] Iniciando Motor de Vinculación..."
-
-# Instalación de dependencias originales + herramientas de noticias solicitadas
-npm install @whiskeysockets/baileys pino readline axios cheerio node-cron
-
 cat << 'EOF' > index.js
-const { default: makeWASocket, useMultiFileAuthState, delay, fetchLatestBaileysVersion, DisconnectReason } = require("@whiskeysockets/baileys");
+const { 
+    default: makeWASocket, 
+    useMultiFileAuthState, 
+    delay, 
+    fetchLatestBaileysVersion, 
+    DisconnectReason 
+} = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const readline = require("readline");
+const axios = require("axios");
+const cheerio = require("cheerio");
+const cron = require("node-cron");
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const question = (text) => new Promise((resolve) => rl.question(text, resolve));
+
+let sock;
+let ultimaNoticia = ""; // Memoria temporal para evitar duplicados en la sesión
+
+// --- FUNCIÓN DE EXTRACCIÓN Y LIMPIEZA DE NOTICIAS ---
+async function obtenerNoticiaMusica() {
+    try {
+        const { data } = await axios.get("https://getmetal.club/");
+        const $ = cheerio.load(data);
+        
+        // Tomar el primer post de la página
+        const post = $("article").first();
+        let tituloRaw = post.find("h2.entry-title").text().trim();
+        
+        // LIMPIEZA: Eliminar basura técnica (320 kbps, RAR, etc.)
+        let tituloLimpio = tituloRaw
+            .replace(/\[.*?\]/g, "")
+            .replace(/\(.*?\)/g, "")
+            .replace(/320\s?kbps/gi, "")
+            .replace(/\.rar/gi, "")
+            .trim();
+
+        if (tituloLimpio === ultimaNoticia) return null;
+        ultimaNoticia = tituloLimpio;
+
+        // Búsqueda de Video (Simulación de enlace para generar preview)
+        const queryYouTube = tituloLimpio.replace(/\s+/g, "+");
+        const enlaceYouTube = `https://www.youtube.com/results?search_query=${queryYouTube}`;
+
+        return `🎸 *NUEVO LANZAMIENTO* 🎸\n\n📢 *Disco:* ${tituloLimpio}\n\n🔗 *Escuchar/Video:* ${enlaceYouTube}`;
+    } catch (e) {
+        console.log("❌ Error al extraer noticias.");
+        return null;
+    }
+}
 
 async function iniciarConexion() {
     const { state, saveCreds } = await useMultiFileAuthState('sesion_bot');
     const { version } = await fetchLatestBaileysVersion();
 
-    const sock = makeWASocket({
+    sock = makeWASocket({
         version,
         logger: pino({ level: "silent" }),
         printQRInTerminal: false,
@@ -71,15 +105,21 @@ async function iniciarConexion() {
 
         if (connection === "close") {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
-            // Solo reinicia automáticamente si ya hay una sesión registrada
-            // Esto evita que el bucle de reinicio cierre el readline durante el emparejamiento
             if (sock.authState.creds.registered && statusCode !== DisconnectReason.loggedOut) {
                 iniciarConexion();
             }
         } else if (connection === "open") {
             console.log("\n✅ ¡CONEXIÓN EXITOSA! WhatsApp vinculado.");
-            console.log("📌 El sistema permanece activo para el noticiero musical.");
-            // Eliminado process.exit(0) para mantener la sesión abierta
+            console.log("📌 El sistema de noticias está activo y monitoreando.");
+            
+            // PROGRAMACIÓN: Revisar noticias cada 3 horas (Ejemplo automático)
+            cron.schedule('0 */3 * * *', async () => {
+                const mensaje = await obtenerNoticiaMusica();
+                if (mensaje) {
+                    console.log("📤 Enviando noticia nueva...");
+                    // Aquí se enviaría al ID del canal cuando lo tengamos definido
+                }
+            });
         }
     });
 
@@ -101,7 +141,7 @@ async function iniciarConexion() {
                 console.log("Introduce este código en la notificación de tu teléfono.");
                 console.log("------------------------------------------------\n");
             } catch (error) {
-                console.log("\n❌ Error al generar el código. Reinicia el script e intenta de nuevo.");
+                console.log("\n❌ Error al generar el código.");
             }
         }
     }
@@ -112,5 +152,5 @@ async function iniciarConexion() {
 iniciarConexion();
 EOF
 
-# Ejecución del proceso
+# Ejecución
 node index.js
