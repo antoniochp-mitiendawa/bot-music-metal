@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# --- CHECKPOINTS (PROHIBIDO MODIFICAR) ---
+# --- CHECKPOINTS (PROHIBIDO MODIFICAR 1 Y 2) ---
 PASO1_BASE=".sistema_base_ok"
 PASO2_MOTOR=".motor_ia_ok"
 
@@ -41,9 +41,9 @@ echo "🔗 [PASO 3] Iniciando Motor de Vinculación..."
 # 1. Asegurar dependencias de red
 npm install @whiskeysockets/baileys pino readline
 
-# 2. Creación del archivo index.js con tiempo de espera para evitar error 428
+# 2. Creación del archivo index.js (Lógica de Emparejamiento Real)
 cat << 'EOF' > index.js
-const { default: makeWASocket, useMultiFileAuthState, delay } = require("@whiskeysockets/baileys");
+const { default: makeWASocket, useMultiFileAuthState, delay, fetchLatestBaileysVersion } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const readline = require("readline");
 
@@ -52,18 +52,34 @@ const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 
 async function iniciarConexion() {
     const { state, saveCreds } = await useMultiFileAuthState('sesion_bot');
-    
+    const { version } = await fetchLatestBaileysVersion();
+
     const sock = makeWASocket({
+        version,
         logger: pino({ level: "silent" }),
         printQRInTerminal: false,
         auth: state,
+        // Identidad del navegador para evitar rechazos del servidor
         browser: ["Ubuntu", "Chrome", "20.0.04"]
     });
 
+    // Manejo de eventos de conexión
+    sock.ev.on("connection.update", async (update) => {
+        const { connection, lastDisconnect } = update;
+
+        if (connection === "close") {
+            // Si la conexión se cierra, reinicia automáticamente para no perder el proceso
+            iniciarConexion();
+        } else if (connection === "open") {
+            console.log("\n✅ ¡CONEXIÓN EXITOSA! WhatsApp vinculado.");
+            process.exit(0);
+        }
+    });
+
+    // Proceso de solicitud de código de emparejamiento
     if (!sock.authState.creds.registered) {
-        // Pausa de 5 segundos para asegurar que el socket esté abierto antes de pedir el número
-        console.log("\n⏳ Estabilizando conexión con WhatsApp...");
-        await delay(5000); 
+        console.log("\n⏳ Sincronizando con los servidores de WhatsApp...");
+        await delay(6000); // Tiempo extra para estabilizar el socket en Termux
 
         console.log("\n------------------------------------------------");
         console.log("📱 CONFIGURACIÓN DE EMPAREJAMIENTO");
@@ -71,26 +87,20 @@ async function iniciarConexion() {
         const numero = await question("👉 Introduce tu número de WhatsApp (ej: 521XXXXXXXXXX): ");
         
         try {
+            // Solicitar código con el número limpio
             const codigo = await sock.requestPairingCode(numero.trim());
             console.log(`\n🔑 TU CÓDIGO DE VINCULACIÓN ES: ${codigo}`);
             console.log("Introduce este código en la notificación de tu teléfono.");
             console.log("------------------------------------------------\n");
         } catch (error) {
-            console.log("\n❌ Error de conexión. Reintentando en 3 segundos...");
-            await delay(3000);
+            console.log("\n❌ Error al generar el código. Reiniciando proceso...");
             process.exit(1);
         }
     }
 
     sock.ev.on("creds.update", saveCreds);
-    sock.ev.on("connection.update", (update) => {
-        const { connection } = update;
-        if (connection === "open") {
-            console.log("✅ ¡CONEXIÓN EXITOSA! WhatsApp vinculado.");
-            process.exit(0);
-        }
-    });
 }
+
 iniciarConexion();
 EOF
 
