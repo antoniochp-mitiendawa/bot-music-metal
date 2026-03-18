@@ -10,7 +10,7 @@ PASO2_MOTOR=".motor_ia_ok"
 echo "🤖 [SISTEMA] Cargando Motor de Gestión Metal 2026 (Versión Programada)..."
 
 # ==========================================
-# PASO 1: CIMENTACIÓN (BLINDADO) [cite: 15-17]
+# PASO 1: CIMENTACIÓN (BLINDADO) [cite: 1-3]
 # ==========================================
 if [ -f "$PASO1_BASE" ];
 then
@@ -23,7 +23,7 @@ else
 fi
 
 # ==========================================
-# PASO 2: MOTOR DE EJECUCIÓN (BLINDADO) [cite: 18-19]
+# PASO 2: MOTOR DE EJECUCIÓN (BLINDADO) [cite: 4-5]
 # ==========================================
 if [ -f "$PASO2_MOTOR" ];
 then
@@ -37,7 +37,7 @@ else
 fi
 
 # ==========================================
-# PASO 3: MOTOR DE IA Y AGENDA (EVOLUCIONADO)
+# PASO 3: MOTOR DE IA Y AGENDA (IMPLEMENTACIÓN)
 # ==========================================
 cat << 'EOF' > index.js
 const { 
@@ -85,7 +85,7 @@ async function verificarVideo(url) {
 
 async function obtenerPortada(banda, album) {
     console.log(`🖼️ Buscando portada para: ${banda} - ${album}...`);
-    // Simulación de búsqueda de imagen basada en metadata
+    // Simulación de búsqueda de imagen profesional
     return "https://m.media-amazon.com/images/I/81O57f-C6rL._SL1500_.jpg"; 
 }
 
@@ -109,12 +109,12 @@ async function sincronizarYProgramar(sock) {
         const agenda = data.map(item => ({ ...item, horarioLimpio: limpiarHorario(item.horario) }));
         fs.writeFileSync(LOCAL_DB, JSON.stringify(agenda));
 
-        // Programar alarmas (Scheduler) para evitar ciclos infinitos
+        // Programación de alarmas (Scheduler) para ahorro de batería
         agenda.forEach(item => {
             if (item.horarioLimpio) {
                 const [hora, min] = item.horarioLimpio.split(":");
                 cron.schedule(`${min} ${hora} * * *`, () => dispararPublicacion(sock, item));
-                console.log(`⏰ Alarma lista: ${item.banda} a las ${item.horarioLimpio}`);
+                console.log(`⏰ Alarma programada: ${item.banda} a las ${item.horarioLimpio}`);
             }
         });
     } catch (e) { console.log("❌ Error de sincronización."); }
@@ -123,10 +123,10 @@ async function sincronizarYProgramar(sock) {
 async function dispararPublicacion(sock, noticia, esPrueba = false) {
     const config = obtenerConfig();
     
-    // Segunda verificación de video antes de postear
+    // Verificación de video antes de postear
     const videoOk = await verificarVideo(noticia.youtube);
     if (!videoOk && !esPrueba) {
-        console.log(`⚠️ Video no disponible: ${noticia.banda}. Avisando...`);
+        console.log(`⚠️ Video no disponible: ${noticia.banda}.`);
         return; 
     }
 
@@ -136,10 +136,10 @@ async function dispararPublicacion(sock, noticia, esPrueba = false) {
     const caption = `🎸 *${esPrueba ? 'PRUEBA DE DEBUT' : 'NUEVO LANZAMIENTO'}* 🤘\n\n` +
                    `📢 *Disco:* ${noticia.banda}\n` +
                    `🌎 *Origen:* ${info.pais}\n` +
-                   `📜 *Historia:* ${info.historia}${info.tracksFormatted}\n\n` +
+                   `📜 *Historia:* ${info.history || info.historia}${info.tracksFormatted}\n\n` +
                    `🔗 *Video:* ${noticia.youtube}`;
 
-    // Envío profesional: Imagen + Texto (Caption)
+    // Envío con imagen de portada y pie de foto (caption)
     await sock.sendMessage(config.idCanal, { 
         image: { url: portadaUrl }, 
         caption: caption 
@@ -163,11 +163,12 @@ async function iniciarConexion() {
         if (connection === "close") {
             if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) iniciarConexion();
         } else if (connection === "open") {
-            console.log("\n✅ SISTEMA VINCULADO");
+            console.log("\n✅ SISTEMA VINCULADO CORRECTAMENTE");
             
             let config = obtenerConfig();
             if (!config.idCanal) {
                 const link = await question("👉 Pega el link de invitación o ID del Canal: ");
+                // Extracción local del ID del canal
                 const idMatch = link.match(/chat\.whatsapp\.com\/([a-zA-Z0-9]+)/) || [null, link];
                 guardarConfig({ idCanal: idMatch[1] || link.trim() });
             }
@@ -179,8 +180,10 @@ async function iniciarConexion() {
             config = obtenerConfig();
             await sincronizarYProgramar(sock);
 
+            // Prueba de debut al instalar
             if (config.esPrimeraVez) {
-                const agenda = JSON.parse(fs.readFileSync(LOCAL_DB));
+                const agendaRaw = fs.readFileSync(LOCAL_DB);
+                const agenda = JSON.parse(agendaRaw);
                 if (agenda.length > 0) await dispararPublicacion(sock, agenda[0], true);
                 guardarConfig({ esPrimeraVez: false });
             }
@@ -191,7 +194,7 @@ async function iniciarConexion() {
 
     if (!sock.authState.creds.registered) {
         await delay(5000);
-        const numero = await question("👉 Introduce tu número (ej: 521...): ");
+        const numero = await question("👉 Tu número (ej: 521...): ");
         const codigo = await sock.requestPairingCode(numero.trim());
         console.log(`\n🔑 CÓDIGO DE VINCULACIÓN: ${codigo}\n`);
     }
