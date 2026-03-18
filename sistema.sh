@@ -9,7 +9,8 @@ echo "🤖 [SISTEMA] Cargando Motor de Noticias Blindado..."
 # ==========================================
 # PASO 1: CIMENTACIÓN (BLINDADO)
 # ==========================================
-if [ -f "$PASO1_BASE" ]; then
+if [ -f "$PASO1_BASE" ];
+then
     echo "✅ [MEMORIA] Paso 1 listo."
 else
     pkg update -y -o Dpkg::Options::="--force-confold"
@@ -21,7 +22,8 @@ fi
 # ==========================================
 # PASO 2: MOTOR DE EJECUCIÓN (BLINDADO)
 # ==========================================
-if [ -f "$PASO2_MOTOR" ]; then
+if [ -f "$PASO2_MOTOR" ];
+then
     echo "✅ [MEMORIA] Paso 2 listo."
 else
     pkg install -y nodejs-lts python ffmpeg libsqlite
@@ -108,18 +110,29 @@ async function iniciarConexion() {
             if (sock.authState.creds.registered && statusCode !== DisconnectReason.loggedOut) {
                 iniciarConexion();
             }
-        } else if (connection === "open") {
+        } 
+        else if (connection === "open") {
             console.log("\n✅ ¡CONEXIÓN EXITOSA! WhatsApp vinculado.");
             console.log("📌 El sistema de noticias está activo y monitoreando.");
+            console.log("👉 ENVÍA UN MENSAJE AL CANAL PARA CAPTURAR EL ID.");
             
             // PROGRAMACIÓN: Revisar noticias cada 3 horas (Ejemplo automático)
             cron.schedule('0 */3 * * *', async () => {
-                const mensaje = await obtenerNoticiaMusica();
+                 const mensaje = await obtenerNoticiaMusica();
                 if (mensaje) {
                     console.log("📤 Enviando noticia nueva...");
                     // Aquí se enviaría al ID del canal cuando lo tengamos definido
                 }
             });
+        }
+    });
+
+    // --- ESCUCHA ACTIVA PARA DETECTAR EL ID DEL CANAL ---
+    sock.ev.on("messages.upsert", async (m) => {
+        const msg = m.messages[0];
+        if (!msg.message) return;
+        if (msg.key.remoteJid.includes("@newsletter")) {
+            console.log("\n📢 ID DEL CANAL DETECTADO: " + msg.key.remoteJid);
         }
     });
 
@@ -132,7 +145,6 @@ async function iniciarConexion() {
         console.log("------------------------------------------------");
         
         const numero = await question("👉 Introduce tu número de WhatsApp (ej: 521XXXXXXXXXX): ");
-        
         if (numero.trim()) {
             try {
                 await delay(2000);
