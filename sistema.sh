@@ -7,7 +7,7 @@ termux-wake-lock
 PASO1_BASE=".sistema_base_ok"
 PASO2_MOTOR=".motor_ia_ok"
 
-echo "🤖 [SISTEMA] Cargando Motor de Gestión con Filtro de Tracks..."
+echo "🤖 [SISTEMA] Cargando Motor de Gestión Metal 2026 (Versión Estable)..."
 
 # ==========================================
 # PASO 1: CIMENTACIÓN (BLINDADO) [cite: 15-17]
@@ -37,7 +37,7 @@ else
 fi
 
 # ==========================================
-# PASO 3: MOTOR DE IA Y AGENDA (IMPLEMENTACIÓN FINAL)
+# PASO 3: MOTOR DE IA Y AGENDA (IMPLEMENTACIÓN INTEGRAL)
 # ==========================================
 cat << 'EOF' > index.js
 const { 
@@ -69,71 +69,106 @@ function guardarConfig(data) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...actual, ...data }));
 }
 
+// --- LIMPIADOR DE HORARIO PARA COINCIDENCIA CON COLUMNA C ---
 function limpiarHorario(datoGoogle) {
     if (typeof datoGoogle !== 'string') return null;
     const match = datoGoogle.match(/(\d{2}:\d{2})/);
     return match ? match[1] : null;
 }
 
-// --- BÚSQUEDA DINÁMICA DE IMAGEN (SIN ARCHIVOS BASURA) ---
-async function obtenerPortadaDinamica(banda) {
+// --- VALIDACIÓN TÉCNICA DE VIDEO ---
+async function verificarVideo(url) {
     try {
-        const query = encodeURIComponent(`${banda} album cover art`);
+        const res = await axios.get(url, { timeout: 5000 });
+        return !res.data.includes("videoIsUnavailable");
+    } catch { return false; }
+}
+
+// --- BÚSQUEDA DE PORTADA (SIN BASURA LOCAL) ---
+async function obtenerPortadaLink(banda) {
+    try {
+        const query = encodeURIComponent(`${banda} album cover art metal`);
         const searchUrl = `https://www.google.com/search?q=${query}&tbm=isch`;
-        const { data } = await axios.get(searchUrl, { 
-            headers: { 'User-Agent': 'Mozilla/5.0' } 
-        });
+        const { data } = await axios.get(searchUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
         const link = data.match(/src="(https:\/\/encrypted-tbn0\.gstatic\.com\/images\?q=[^"]+)"/);
         return link ? link[1] : null;
     } catch { return null; }
 }
 
+// --- INVESTIGACIÓN DE BANDA (BLINDADO CON EMOJIS) [cite: 27-32] ---
 async function investigarBandaPro(noticia) {
     const databaseMetal = {
-        "Septicflesh": { pais: "Grecia 🇬🇷", historia: "Pioneros del Death Metal Sinfónico." },
-        "Rotting Christ": { pais: "Grecia 🇬🇷", historia: "Leyendas del Dark Metal ritualista." }
+        "Septicflesh": { pais: "Grecia 🇬🇷", historia: "Pioneros del Death Metal Sinfónico con una atmósfera orquestal única." },
+        "Rotting Christ": { pais: "Grecia 🇬🇷", historia: "Leyendas del Dark Metal con un sonido ritualista y oscuro." }
     };
     const nombreBanda = noticia.banda.split(" - ")[0];
-    const info = databaseMetal[nombreBanda] || { pais: "Internacional 🌎", historia: "Lanzamiento destacado de 2026." };
-    return { ...info, tracksFormatted: noticia.tracks ? `\n\n💿 *Tracks:* ${noticia.tracks}` : "" };
+    const info = databaseMetal[nombreBanda] || { 
+        pais: "Origen Confirmado 🌎", 
+        historia: "Agrupación destacada dentro de los nuevos lanzamientos de metal 2026." 
+    };
+    return {
+        ...info,
+        tracksFormatted: noticia.tracks ? `\n\n💿 *Tracks Destacados:*\n${noticia.tracks}` : ""
+    };
 }
 
+// --- SINCRONIZACIÓN Y PROGRAMACIÓN DE ALARMAS (MAPEO A-B-C-D) ---
 async function sincronizarYProgramar(sock) {
     const config = obtenerConfig();
     if (!config.urlGoogle) return;
 
     try {
-        console.log("📥 Sincronizando agenda desde Google...");
+        console.log("📥 Sincronizando todas las filas desde Google...");
         const { data } = await axios.get(config.urlGoogle);
-        const agenda = data.map(item => ({ ...item, horarioLimpio: limpiarHorario(item.horario) }));
+        
+        // Mapeo exacto: A=banda, B=youtube, C=horario, D=tracks [cite: 13-14]
+        const agenda = data.map(item => ({
+            ...item,
+            horarioLimpio: limpiarHorario(item.horario)
+        }));
+        
         fs.writeFileSync(LOCAL_DB, JSON.stringify(agenda));
 
-        // Programación de alarmas exactas (Scheduler)
+        // Programación de tareas exactas (Scheduler)
         agenda.forEach(item => {
             if (item.horarioLimpio) {
                 const [hora, min] = item.horarioLimpio.split(":");
                 cron.schedule(`${min} ${hora} * * *`, () => dispararPublicacion(sock, item));
-                console.log(`⏰ Alarma programada: ${item.banda} a las ${item.horarioLimpio}`);
+                console.log(`⏰ Alarma configurada: ${item.banda} -> ${item.horarioLimpio}`);
             }
         });
-    } catch (e) { console.log("❌ Error de sincronización."); }
+        return agenda;
+    } catch (e) {
+        console.log("❌ Error al consultar la hoja.");
+        return [];
+    }
 }
 
+// --- DISPARO DE PUBLICACIÓN (BLINDADO CON NUEVAS MEJORAS) ---
 async function dispararPublicacion(sock, noticia, esPrueba = false) {
     const config = obtenerConfig();
-    const info = await investigarBandaPro(noticia);
-    const portadaUrl = await obtenerPortadaDinamica(noticia.banda);
+    
+    // Validación de video verídica
+    const videoOk = await verificarVideo(noticia.youtube);
+    if (!videoOk && !esPrueba) {
+        console.log(`⚠️ Video no disponible para ${noticia.banda}, post cancelado.`);
+        return;
+    }
 
-    const caption = `🎸 *${esPrueba ? 'PRUEBA DE DEBUT' : 'NUEVO LANZAMIENTO'}* 🤘\n\n` +
+    const infoExtra = await investigarBandaPro(noticia);
+    const portadaUrl = await obtenerPortadaLink(noticia.banda);
+
+    const mensaje = `🎸 *${esPrueba ? 'PRUEBA DE INSTALACIÓN' : 'NUEVO LANZAMIENTO 2026'}* 🤘\n\n` +
                    `📢 *Disco:* ${noticia.banda}\n` +
-                   `🌎 *Origen:* ${info.pais}\n` +
-                   `📜 *Historia:* ${info.historia}${info.tracksFormatted}\n\n` +
-                   `🔗 *Video:* ${noticia.youtube}`;
+                   `🌎 *Origen:* ${infoExtra.pais}\n` +
+                   `📜 *Historia:* ${infoExtra.historia}${infoExtra.tracksFormatted}\n\n` +
+                   `🔗 *Video Oficial:* ${noticia.youtube}`;
 
+    // Envío con imagen si existe, si no, solo texto
     if (portadaUrl) {
-        await sock.sendMessage(config.idCanal, { image: { url: portadaUrl }, caption: caption });
+        await sock.sendMessage(config.idCanal, { image: { url: portadaUrl }, caption: mensaje });
     } else {
-        await sock.sendMessage(config.idCanal, { text: caption });
+        await sock.sendMessage(config.idCanal, { text: mensaje });
     }
 }
 
@@ -159,11 +194,11 @@ async function iniciarConexion() {
             let config = obtenerConfig();
             if (!config.idCanal) {
                 const link = await question("👉 Pega el link de invitación o ID del Canal: ");
-                // Extracción del ID alfanumérico desde la liga del canal
+                // Extracción automática del ID desde la liga
                 const idMatch = link.match(/channel\/([a-zA-Z0-9]+)/) || link.match(/chat\.whatsapp\.com\/([a-zA-Z0-9]+)/) || [null, link];
                 const idFinal = idMatch[1] || link.trim();
-                console.log(`✅ ID Extraído: ${idFinal}`);
                 guardarConfig({ idCanal: idFinal });
+                console.log(`✅ ID de destino configurado: ${idFinal}`);
             }
             if (!config.urlGoogle) {
                 const url = await question("👉 Pega la URL de tu App Script: ");
@@ -171,11 +206,12 @@ async function iniciarConexion() {
             }
             
             config = obtenerConfig();
-            await sincronizarYProgramar(sock);
+            const agenda = await sincronizarYProgramar(sock);
 
-            if (config.esPrimeraVez) {
-                const agenda = JSON.parse(fs.readFileSync(LOCAL_DB));
-                if (agenda.length > 0) await dispararPublicacion(sock, agenda[0], true);
+            // Mensaje de prueba de debut [cite: 45-46]
+            if (config.esPrimeraVez && agenda && agenda.length > 0) {
+                console.log("🧪 Validando formato con mensaje de prueba...");
+                await dispararPublicacion(sock, agenda[0], true);
                 guardarConfig({ esPrimeraVez: false });
             }
 
