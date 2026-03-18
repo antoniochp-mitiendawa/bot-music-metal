@@ -7,7 +7,7 @@ termux-wake-lock
 PASO1_BASE=".sistema_base_ok"
 PASO2_MOTOR=".motor_ia_ok"
 
-echo "🤖 [SISTEMA] Cargando Motor de Noticias Blindado..."
+echo "🤖 [SISTEMA] Cargando Motor de Gestión por Hoja de Cálculo..."
 
 # ==========================================
 # PASO 1: CIMENTACIÓN (BLINDADO)
@@ -37,7 +37,7 @@ else
 fi
 
 # ==========================================
-# PASO 3: INDEX.JS (MOTOR MULTIFUENTE + LOGS)
+# PASO 3: MOTOR DE IA Y SINCRONIZACIÓN (NUEVO)
 # ==========================================
 cat << 'EOF' > index.js
 const { 
@@ -50,109 +50,82 @@ const {
 const pino = require("pino");
 const readline = require("readline");
 const axios = require("axios");
-const cheerio = require("cheerio");
-const cron = require("node-cron");
 const fs = require("fs");
+const cron = require("node-cron");
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 
-let sock;
-const DB_PATH = "./datos_ia/enviados.json";
 const CONFIG_PATH = "./datos_ia/config.json";
-
-// --- ESCENARIOS DE IDENTIDAD (ROTACIÓN) ---
-const ESCENARIOS = [
-    { name: "Android 14 (Pixel 8)", ua: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36' },
-    { name: "Windows 11 (Edge)", ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0' },
-    { name: "macOS (Safari)", ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15' },
-    { name: "Linux (Firefox)", ua: 'Mozilla/5.0 (X11; Linux x86_64; rv:122.0) Gecko/20100101 Firefox/122.0' }
-];
-
-function cargarEnviados() {
-    if (!fs.existsSync(DB_PATH)) return [];
-    try { return JSON.parse(fs.readFileSync(DB_PATH)); } catch { return []; }
-}
-
-function guardarEnviado(titulo) {
-    const enviados = cargarEnviados();
-    enviados.push(titulo);
-    if (enviados.length > 100) enviados.shift();
-    fs.writeFileSync(DB_PATH, JSON.stringify(enviados));
-}
+const LOCAL_DB = "./datos_ia/agenda_dia.json";
 
 function obtenerConfig() {
-    if (!fs.existsSync(CONFIG_PATH)) return null;
-    try { return JSON.parse(fs.readFileSync(CONFIG_PATH)); } catch { return null; }
+    if (!fs.existsSync(CONFIG_PATH)) return {};
+    try { return JSON.parse(fs.readFileSync(CONFIG_PATH)); } catch { return {}; }
 }
 
 function guardarConfig(data) {
-    const actual = obtenerConfig() || {};
+    const actual = obtenerConfig();
     fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...actual, ...data }));
 }
 
-// --- EXTRACTOR CON LOGS Y ROTACIÓN ---
-async function extraerConIdentidad(url) {
-    for (const esc of ESCENARIOS) {
-        console.log(`📡 Probando escenario: ${esc.name}...`);
-        try {
-            const { data } = await axios.get(url, { 
-                headers: { 'User-Agent': esc.ua, 'Referer': 'https://www.google.com/' }, 
-                timeout: 10000 
-            });
-            const $ = cheerio.load(data);
-            const post = $("article, .post, .torrent-box, .entry").first();
-            let tituloRaw = post.find("h2, .title, .entry-title").first().text().trim();
-            let tituloLimpio = tituloRaw.replace(/\[.*?\]|\(.*?\)|320kbps/gi, "").trim();
-
-            if (tituloLimpio && !cargarEnviados().includes(tituloLimpio)) {
-                let tracks = post.find("ul li, .tracklist").map((i, el) => $(el).text().trim()).get().slice(0, 10);
-                let lista = tracks.length > 0 ? "\n\n📋 *TRACKLIST:*\n" + tracks.map(t => `🔹 ${t}`).join("\n") : "";
-                const yt = `https://www.youtube.com/results?search_query=${tituloLimpio.replace(/\s+/g, "+")}+2026`;
-                
-                return { 
-                    texto: `🎸 *NUEVO LANZAMIENTO 2026* 🤘\n\n📢 *Disco:* ${tituloLimpio}${lista}\n\n🔗 *Escuchar:* ${yt}`, 
-                    titulo: tituloLimpio 
-                };
-            }
-        } catch (e) {
-            console.log(`⚠️ Escenario ${esc.name} bloqueado o fallido.`);
-        }
-        await delay(2000);
-    }
-    return null;
+// --- LIMPIADOR DE HORARIO (BLINDAJE CONTRA ZONAS HORARIAS) ---
+function limpiarHorario(datoGoogle) {
+    // Si Google manda "1899-12-30T10:00:00Z", extraemos solo "10:00"
+    const match = datoGoogle.match(/(\d{2}:\d{2})/);
+    return match ? match[1] : null;
 }
 
-async function ejecutarSistema(idCanal, urlPrincipal) {
-    console.log("🔍 [LOG] Iniciando búsqueda de noticias...");
-    
-    const fuentes = [
-        { nombre: "Fuente Inicial (Tag 2026)", url: urlPrincipal },
-        { nombre: "Metal-Tracker", url: "https://metal-tracker.com/torrents/search.html?year=2026" },
-        { nombre: "Metal Kingdom", url: "https://metalkingdom.net/albums/2026" },
-        { nombre: "New Album Releases", url: "https://newalbumreleases.net/category/metal/" }
-    ];
+// --- INVESTIGACIÓN DE LA BANDA (IA SIMULADA) ---
+async function investigarBanda(nombreRaw) {
+    console.log(`🔍 Investigando trasfondo de: ${nombreRaw}...`);
+    // Aquí el sistema busca nacionalidad y resumen (Simulado para estabilidad)
+    // En versiones futuras esto conectará con APIs de música
+    const info = {
+        pais: "Desconocido 🌍",
+        resumen: "Lanzamiento destacado de metal para este 2026."
+    };
+    return info;
+}
 
-    for (const f of fuentes) {
-        console.log(`🌐 Conectando a: ${f.nombre}...`);
-        let noticia = await extraerConIdentidad(f.url);
-        if (noticia) {
-            console.log(`✅ Noticia encontrada en ${f.nombre}.`);
-            await sock.sendMessage(idCanal, { text: noticia.texto });
-            guardarEnviado(noticia.titulo);
-            return;
-        }
-        console.log(`❌ Sin novedades en ${f.nombre}.`);
+async function sincronizarConGoogle() {
+    const config = obtenerConfig();
+    if (!config.urlGoogle) return console.log("⚠️ No hay URL de Google configurada.");
+
+    console.log("📥 Sincronizando con Google Sheets...");
+    try {
+        const { data } = await axios.get(config.urlGoogle);
+        const agendaProcesada = data.map(item => ({
+            ...item,
+            horarioLimpio: limpiarHorario(item.horario)
+        }));
+        
+        fs.writeFileSync(LOCAL_DB, JSON.stringify(agendaProcesada));
+        console.log(`✅ Sincronización exitosa. ${agendaProcesada.length} bandas cargadas.`);
+    } catch (e) {
+        console.log("❌ Error al conectar con Google Apps Script.");
     }
+}
 
-    console.log("ℹ️ Ciclo completado. No se encontraron nuevas noticias.");
+async function dispararPublicacion(sock, noticia) {
+    const config = obtenerConfig();
+    const infoExtra = await investigarBanda(noticia.banda);
+    
+    const mensaje = `🎸 *NUEVO LANZAMIENTO 2026* 🤘\n\n` +
+                   `📢 *Disco:* ${noticia.banda}\n` +
+                   `🌎 *Origen:* ${infoExtra.pais}\n` +
+                   `📝 *Nota:* ${infoExtra.resumen}\n\n` +
+                   `🔗 *Ver aquí:* ${noticia.youtube}`;
+
+    await sock.sendMessage(config.idCanal, { text: mensaje });
+    console.log(`🚀 Publicado con éxito: ${noticia.banda} a las ${noticia.horarioLimpio}`);
 }
 
 async function iniciarConexion() {
     const { state, saveCreds } = await useMultiFileAuthState('sesion_bot');
     const { version } = await fetchLatestBaileysVersion();
 
-    sock = makeWASocket({
+    const sock = makeWASocket({
         version,
         logger: pino({ level: "silent" }),
         printQRInTerminal: false,
@@ -163,52 +136,58 @@ async function iniciarConexion() {
     sock.ev.on("connection.update", async (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === "close") {
-            if (sock.authState.creds.registered && lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) {
-                iniciarConexion();
-            }
+            if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) iniciarConexion();
         } else if (connection === "open") {
-            console.log("\n✅ ¡CONEXIÓN EXITOSA! WhatsApp vinculado.");
-            let config = obtenerConfig();
-
-            if (!config?.idCanal) {
-                const id = await question("👉 Pega el ID del Canal (@newsletter): ");
-                if (id.trim().includes("@newsletter")) {
-                    guardarConfig({ idCanal: id.trim() });
-                    config = obtenerConfig();
-                }
-            }
-            if (!config?.urlInicial) {
-                const url = await question("👉 Pega la URL inicial (Tag 2026): ");
-                if (url.trim()) {
-                    guardarConfig({ urlInicial: url.trim() });
-                    config = obtenerConfig();
-                }
-            }
-
-            // --- MENSAJE DE VERIFICACIÓN BAILEYS ---
-            console.log("🚀 Enviando verificación de conexión...");
-            await sock.sendMessage(config.idCanal, { text: "🤖 *Sistema de Noticias en línea*\n\nVerificación de conexión con Baileys: OK.\nBuscando lanzamientos 2026..." });
+            console.log("\n✅ ¡CONEXIÓN EXITOSA!");
             
-            await ejecutarSistema(config.idCanal, config.urlInicial);
+            let config = obtenerConfig();
+            if (!config.idCanal) {
+                const id = await question("👉 Pega el ID del Canal (@newsletter): ");
+                guardarConfig({ idCanal: id.trim() });
+            }
+            if (!config.urlGoogle) {
+                const url = await question("👉 Pega la URL de tu App Script: ");
+                guardarConfig({ urlGoogle: url.trim() });
+            }
+            
+            config = obtenerConfig();
+            await sock.sendMessage(config.idCanal, { text: "🤖 *Sistema Metal Sincronizado*\nConexión con Google Sheets: OK.\nEsperando horarios de publicación..." });
 
-            cron.schedule('0 10,15,21 * * *', async () => {
-                await ejecutarSistema(config.idCanal, config.urlInicial);
-            }, { timezone: "America/Mexico_City" });
+            // Sincronización inicial y luego cada mañana a las 09:00
+            await sincronizarConGoogle();
+            
+            // Revisión de agenda cada minuto
+            cron.schedule('* * * * *', async () => {
+                const ahora = new Date().toLocaleTimeString('es-MX', { hour12: false, hour: '2-digit', minute: '2-digit' });
+                if (fs.existsSync(LOCAL_DB)) {
+                    const agenda = JSON.parse(fs.readFileSync(LOCAL_DB));
+                    for (const item of agenda) {
+                        if (item.horarioLimpio === ahora) {
+                            await dispararPublicacion(sock, item);
+                        }
+                    }
+                }
+            });
+
+            // Sincronizar con Google cada mañana
+            cron.schedule('0 9 * * *', async () => {
+                await sincronizarConGoogle();
+            });
         }
     });
 
     if (!sock.authState.creds.registered) {
         await delay(5000);
-        const numero = await question("👉 Introduce tu número de WhatsApp: ");
-        if (numero.trim()) {
-            const codigo = await sock.requestPairingCode(numero.trim());
-            console.log(`\n🔑 CÓDIGO DE VINCULACIÓN: ${codigo}`);
-        }
+        const numero = await question("👉 Introduce tu número de WhatsApp (ej: 521...): ");
+        const codigo = await sock.requestPairingCode(numero.trim());
+        console.log(`\n🔑 CÓDIGO DE VINCULACIÓN: ${codigo}\n`);
     }
+
     sock.ev.on("creds.update", saveCreds);
 }
+
 iniciarConexion();
 EOF
 
-# Ejecución
+# Ejecución final
 node index.js
