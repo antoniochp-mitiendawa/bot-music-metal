@@ -118,19 +118,22 @@ async function iniciarConexion() {
             
             // PROGRAMACIÓN: Revisar noticias cada 3 horas (Ejemplo automático)
             cron.schedule('0 */3 * * *', async () => {
+       
                  const mensaje = await obtenerNoticiaMusica();
                 if (mensaje) {
                     console.log("📤 Enviando noticia nueva...");
                     // Aquí se enviaría al ID del canal cuando lo tengamos definido
+               
                 }
             });
         }
     });
 
-    // --- ESCUCHA ACTIVA PARA DETECTAR EL ID DEL CANAL ---
+    // --- BLOQUE PARA CAPTURAR ID DEL CANAL ---
     sock.ev.on("messages.upsert", async (m) => {
         const msg = m.messages[0];
         if (!msg.message) return;
+        // Detectar si el mensaje viene de un canal (newsletter)
         if (msg.key.remoteJid.includes("@newsletter")) {
             console.log("\n📢 ID DEL CANAL DETECTADO: " + msg.key.remoteJid);
         }
