@@ -1,24 +1,17 @@
 #!/data/data/com.termux/files/usr/bin/bash
+
+# --- INSTALACIÓN Y ACTUALIZACIÓN DESDE CERO (NO MODIFICAR) ---
 termux-wake-lock
+echo "🚀 Iniciando instalación completa de Sistema Metal..."
 
-# --- CAPA DE INSTALACIÓN BLINDADA ---
-PASO1_BASE=".sistema_base_ok"
-PASO2_MOTOR=".motor_ia_ok"
+pkg update -y -o Dpkg::Options::="--force-confold"
+pkg upgrade -y -o Dpkg::Options::="--force-confold"
+pkg install -y git nodejs-lts python ffmpeg libsqlite openssl wget -o Dpkg::Options::="--force-confold"
 
-if [ ! -f "$PASO1_BASE" ]; then
-    pkg update -y -o Dpkg::Options::="--force-confold"
-    pkg upgrade -y -o Dpkg::Options::="--force-confold"
-    pkg install -y git openssl wget
-    touch "$PASO1_BASE"
-fi
+mkdir -p datos_ia sesion_bot
+npm install @whiskeysockets/baileys pino readline axios node-cron cheerio
 
-if [ ! -f "$PASO2_MOTOR" ]; then
-    pkg install -y nodejs-lts python ffmpeg libsqlite
-    mkdir -p datos_ia sesion_bot
-    npm install @whiskeysockets/baileys pino readline axios node-cron
-    touch "$PASO2_MOTOR"
-fi
-
+# --- GENERACIÓN DEL ARCHIVO DEL BOT ---
 cat << 'EOF' > bot_metal.js
 const { default: makeWASocket, useMultiFileAuthState, delay, fetchLatestBaileysVersion, DisconnectReason } = require("@whiskeysockets/baileys");
 const pino = require("pino");
@@ -33,15 +26,13 @@ const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 const CONFIG_PATH = "./datos_ia/config.json";
 const LOCAL_DB = "./datos_ia/agenda_dia.json";
 
-// --- BASE DE DATOS DE BANDERAS ---
 const banderas = {
     "Grecia": "🇬🇷", "Sweden": "🇸🇪", "Suecia": "🇸🇪", "Norway": "🇳🇴", "Noruega": "🇳🇴",
     "Germany": "🇩🇪", "Alemania": "🇩🇪", "USA": "🇺🇸", "EEUU": "🇺🇸", "Mexico": "🇲🇽",
     "México": "🇲🇽", "Finland": "🇫🇮", "Finlandia": "🇫🇮", "Brazil": "🇧🇷", "Brasil": "🇧🇷",
-    "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Inglaterra": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Canada": "🇨🇦", "Canadá": "🇨🇦"
+    "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Inglaterra": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Canada": "🇨🇦", "Canadá": "🇨🇦", "Poland": "🇵🇱", "Polonia": "🇵🇱"
 };
 
-// --- MOTOR DE SPINTAX NOTICIOSO ---
 const spintax = {
     intro: ["🔥 *¡ALERTA DE ESTRENO!*", "🤘 *NOVEDAD BRUTAL*", "⚡ *IMPACTO METALERO*", "🎸 *CRÓNICA DEL DÍA*"],
     bio_label: ["📜 *Trasfondo:*", "📖 *La Historia:*", "🔍 *Análisis:*", "📄 *Ficha Técnica:*"],
@@ -68,26 +59,21 @@ async function sincronizarConGoogle() {
     if (!config.urlGoogle) return [];
     try {
         const { data } = await axios.get(config.urlGoogle);
-        // El bot ahora espera 8 columnas según la nueva hoja
         const agenda = data.map(i => ({ ...i, horarioLimpio: limpiarHorario(i.horario) })).filter(i => i.banda && i.horarioLimpio);
         fs.writeFileSync(LOCAL_DB, JSON.stringify(agenda));
-        console.log(`📅 Sincronización exitosa: ${agenda.length} publicaciones en agenda.`);
+        console.log(`📅 Sincronizado: ${agenda.length} bandas en agenda.`);
         return agenda;
     } catch (e) { return fs.existsSync(LOCAL_DB) ? JSON.parse(fs.readFileSync(LOCAL_DB)) : []; }
 }
 
-async function dispararPublicacion(sock, noticia, esPrueba = false) {
+async function dispararPublicacion(sock, noticia) {
     const config = obtenerConfig();
     if (!config.idCanal) return;
 
-    // 1. Simulación Humana (Typing) de 8 segundos
     await sock.sendPresenceUpdate('composing', config.idCanal);
-    await delay(8000);
+    await delay(10000); // 10 segundos de typing real
 
-    // 2. Procesamiento de Bandera
     const emojiPais = banderas[noticia.pais] || "🌎";
-
-    // 3. Construcción del Mensaje con Formato Noticioso (Negritas y Cursivas)
     const msg = `${getSpin('intro')}\n\n` +
                 `📢 *Banda:* _${noticia.banda}_\n` +
                 `🎸 *Género:* ${noticia.genero}\n` +
@@ -96,17 +82,11 @@ async function dispararPublicacion(sock, noticia, esPrueba = false) {
                 `${getSpin('tracks_label')}\n_${noticia.tracks}_\n\n` +
                 `${getSpin('link_label')} ${noticia.youtube}`;
 
-    // 4. Envío de Imagen como Contenedor (Si existe URL)
     if (noticia.imagen && noticia.imagen.startsWith('http')) {
         try {
             const res = await axios.get(noticia.imagen, { responseType: 'arraybuffer' });
-            await sock.sendMessage(config.idCanal, { 
-                image: Buffer.from(res.data), 
-                caption: msg 
-            });
-        } catch (e) { 
-            await sock.sendMessage(config.idCanal, { text: msg }); 
-        }
+            await sock.sendMessage(config.idCanal, { image: Buffer.from(res.data), caption: msg });
+        } catch (e) { await sock.sendMessage(config.idCanal, { text: msg }); }
     } else {
         await sock.sendMessage(config.idCanal, { text: msg });
     }
@@ -123,10 +103,9 @@ async function iniciar() {
         if (connection === "close") { 
             if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) iniciar(); 
         } else if (connection === "open") {
-            console.log("\n✅ SISTEMA METAL 2026 VINCULADO");
+            console.log("\n✅ VINCULADO CORRECTAMENTE");
             let config = obtenerConfig();
 
-            // PASO 2: CAPTURA DE ID (PROTEGIDO)
             if (!config.idCanal) {
                 console.log("\n👉 PASO 2: Envía un mensaje a tu CANAL para capturar el ID.");
                 sock.ev.on("messages.upsert", async (m) => {
@@ -139,36 +118,32 @@ async function iniciar() {
                         if (!config.urlGoogle) {
                             const url = await question("\n👉 PASO 3: Pega la URL de tu App Script: ");
                             guardarConfig({ urlGoogle: url.trim() });
-                            const agenda = await sincronizarConGoogle();
-                            if (agenda.length > 0) await dispararPublicacion(sock, agenda[0], true);
+                            await sincronizarConGoogle();
                         }
                     }
                 });
             }
 
-            // CRONOGRAMA DE PUBLICACIÓN
             cron.schedule('* * * * *', async () => {
                 const ahora = new Date().toLocaleTimeString('es-MX', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' });
                 if (fs.existsSync(LOCAL_DB)) {
                     const datos = JSON.parse(fs.readFileSync(LOCAL_DB));
                     for (const item of datos) { 
                         if (item.horarioLimpio === ahora) {
-                            // Delay aleatorio para evitar detección de bot
-                            setTimeout(() => dispararPublicacion(sock, item), Math.random() * 10000);
+                            setTimeout(() => dispararPublicacion(sock, item), Math.random() * 5000);
                         }
                     }
                 }
-                // Sincronizar con la hoja cada 30 min automáticamente
-                if (new Date().getMinutes() % 30 === 0) await sincronizarConGoogle();
+                if (new Date().getMinutes() % 15 === 0) await sincronizarConGoogle();
             });
         }
     });
 
     if (!sock.authState.creds.registered) {
         await delay(5000);
-        const numero = await question("👉 Introduce tu número (con código de país): ");
+        const numero = await question("👉 Tu número (con código de país): ");
         const codigo = await sock.requestPairingCode(numero.trim());
-        console.log(`\n🔑 TU CÓDIGO DE VINCULACIÓN: ${codigo}\n`);
+        console.log(`\n🔑 CÓDIGO DE VINCULACIÓN: ${codigo}\n`);
     }
     sock.ev.on("creds.update", saveCreds);
 }
