@@ -1,11 +1,11 @@
 #!/data/data/com.termux/files/usr/bin/bash
 termux-wake-lock
 
-# --- INSTALACIÓN DE DEPENDENCIAS ADICIONALES PARA BÚSQUEDA ---
+# --- INSTALACIÓN DE DEPENDENCIAS (NÚCLEO + NUEVAS FUNCIONES) ---
 pkg update -y && pkg upgrade -y
 pkg install -y git nodejs-lts python ffmpeg libsqlite openssl wget
 mkdir -p datos_ia sesion_bot
-# Instalamos 'cheerio' para el scraping silencioso sin APIs
+# Instalamos cheerio para el scraping de Bio/País sin usar APIs externas
 npm install @whiskeysockets/baileys pino readline axios node-cron cheerio
 
 cat << 'EOF' > bot_metal.js
@@ -23,7 +23,7 @@ const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 const CONFIG_PATH = "./datos_ia/config.json";
 const INFO_HOY_PATH = "./datos_ia/hoy.json";
 
-// --- MOTOR DE SPINTAX Y FORMATO ---
+// --- MOTOR DE SPINTAX (HUMANIZACIÓN) ---
 const spintax = (text) => {
     return text.replace(/\{([^{}]+)\}/g, (match, options) => {
         const choices = options.split('|');
@@ -41,46 +41,45 @@ function guardarConfig(data) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...actual, ...data }));
 }
 
-// --- CAPA DE INTELIGENCIA: BÚSQUEDA Y SCRAPING (SIN API) ---
+// --- CAPA DE INTELIGENCIA Y BÚSQUEDA (SIN APIS) ---
 async function enriquecerInformacion(bandaAlbum, tracks) {
-    console.log(`🔍 Investigando: ${bandaAlbum}...`);
+    console.log(`🔍 Buscando datos de: ${bandaAlbum}...`);
     try {
-        // Buscamos en Wikipedia/DuckDuckGo de forma silenciosa
-        const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(bandaAlbum + " band wikipedia")}`;
+        const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(bandaAlbum + " band official info")}`;
         const { data } = await axios.get(searchUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
         const $ = cheerio.load(data);
+        const snippet = $(".result__snippet").first().text() || "Información biográfica en proceso de redacción.";
         
-        // Simulación de extracción de datos (País y Bio corta)
-        const snippet = $(".result__snippet").first().text() || "Información en proceso de actualización.";
-        const paises = ["Suecia 🇸🇪", "Noruega 🇳🇴", "México 🇲🇽", "EE.UU. 🇺🇸", "Alemania 🇩🇪", "Inglaterra 🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Grecia 🇬🇷", "Brasil 🇧🇷"];
-        const paisDetectado = paises.find(p => snippet.toLowerCase().includes(p.split(' ')[0].toLowerCase())) || "Origen Desconocido 🤘";
+        // Base de datos local de banderas y géneros
+        const paises = ["Suecia 🇸🇪", "Noruega 🇳🇴", "México 🇲🇽", "EE.UU. 🇺🇸", "Alemania 🇩🇪", "Inglaterra 🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Grecia 🇬🇷", "Brasil 🇧🇷", "Finlandia 🇫🇮"];
+        const paisDetectado = paises.find(p => snippet.toLowerCase().includes(p.split(' ')[0].toLowerCase())) || "Origen Internacional 🤘";
         
-        // Definición de Géneros basada en el nombre (Lógica local)
-        const generos = ["Death Metal", "Black Metal", "Heavy Metal", "Thrash", "Nu-Metal", "Hardcore"];
-        const generoDetectado = generos.find(g => bandaAlbum.toLowerCase().includes(g.toLowerCase())) || "Metal Extremo";
+        const generos = ["Death Metal", "Black Metal", "Heavy Metal", "Thrash Metal", "Power Metal", "Doom Metal"];
+        const generoDetectado = generos.find(g => snippet.toLowerCase().includes(g.toLowerCase())) || "Metal Extremo";
 
         return {
             pais: paisDetectado,
-            bio: snippet.substring(0, 200) + "...",
+            bio: snippet.substring(0, 250) + "...",
             genero: generoDetectado,
-            tematica: "{Misticismo y Oscuridad|Historia y Guerra|Crítica Social y Caos|Mitología Antigua}"
+            tematica: "{Oscuridad y Mitología|Caos y Realidad|Historia Bélica|Misticismo Profundo}"
         };
     } catch (e) {
-        return { pais: "Metalero 🤘", bio: "Una obra brutal de metal puro.", genero: "Metal", tematica: "Poder y Energía" };
+        return { pais: "Metalero 🤘", bio: "Una pieza fundamental del metal contemporáneo.", genero: "Metal", tematica: "Poder Absoluto" };
     }
 }
 
 async function sincronizarDatos(urlGoogle) {
     try {
+        console.log("⏳ Sincronizando con Google Sheets...");
         const { data } = await axios.get(urlGoogle);
         const enriquecidos = [];
         for (const item of data) {
             const infoExtra = await enriquecerInformacion(item.banda, item.tracks);
             enriquecidos.push({ ...item, ...infoExtra });
-            await delay(2000); // Pausa antibaneo entre búsquedas
+            await delay(3000); // Pausa antibaneo
         }
         fs.writeFileSync(INFO_HOY_PATH, JSON.stringify(enriquecidos));
-        console.log("✅ Sincronización y Enriquecimiento completado.");
+        console.log("✅ Datos preparados para el día de hoy.");
         return enriquecidos;
     } catch (e) {
         console.log("❌ Error en sincronización: " + e.message);
@@ -108,7 +107,7 @@ async function iniciar() {
             console.log("\n✅ SISTEMA METAL CONECTADO Y VINCULADO");
             let config = obtenerConfig();
 
-            // CAPTURA DE ID DEL CANAL (Original Blindado)
+            // CAPTURA DE ID (CÓDIGO ORIGINAL BLINDADO)
             if (!config.idCanal) {
                 console.log("\n👉 PASO 2: Envía un mensaje a tu CANAL para capturar el ID.");
                 sock.ev.on("messages.upsert", async (m) => {
@@ -126,24 +125,24 @@ async function iniciar() {
                 });
             }
 
-            // ESCUCHA DE COMANDOS MANUALES (Actualizar)
+            // COMANDO MANUAL DE ACTUALIZACIÓN
             sock.ev.on("messages.upsert", async (m) => {
                 const msg = m.messages[0];
                 const texto = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
-                if (texto?.toLowerCase() === "actualizar" && config.urlGoogle) {
-                    await sock.sendMessage(msg.key.remoteJid, { text: "⏳ Refrescando noticias y base de datos..." });
+                if ((texto?.toLowerCase() === "actualizar" || texto?.toLowerCase() === "revisar noticias") && config.urlGoogle) {
+                    await sock.sendMessage(msg.key.remoteJid, { text: "⏳ Actualizando base de datos de noticias..." });
                     await sincronizarDatos(config.urlGoogle);
-                    await sock.sendMessage(msg.key.remoteJid, { text: "✅ ¡Sincronización completa!" });
+                    await sock.sendMessage(msg.key.remoteJid, { text: "✅ Noticias actualizadas correctamente." });
                 }
             });
 
-            // CRON 10:00 AM (Sincronización Diaria Automática)
+            // CRON 10:00 AM (SINCRO DIARIA)
             cron.schedule('0 10 * * *', async () => {
                 const conf = obtenerConfig();
                 if (conf.urlGoogle) await sincronizarDatos(conf.urlGoogle);
             });
 
-            // CICLO DE PUBLICACIÓN CON TYPING Y FORMATO PROFESIONAL
+            // MOTOR DE PUBLICACIÓN PROFESIONAL
             cron.schedule('* * * * *', async () => {
                 if (!fs.existsSync(INFO_HOY_PATH)) return;
                 const noticias = JSON.parse(fs.readFileSync(INFO_HOY_PATH));
@@ -169,11 +168,11 @@ async function iniciar() {
                                      `💿 *Tracks:* _${item.tracks}_\n\n` +
                                      `${emojiVideo} *Video:* ${item.youtube}`;
 
-                        // Simulación Humana: Typing proporcional al largo del texto
+                        // Simulación Humana (Typing)
                         await sock.sendPresenceUpdate('composing', config.idCanal);
-                        await delay(8000); 
+                        await delay(10000); 
                         await sock.sendMessage(config.idCanal, { text: cuerpo });
-                        console.log(`🚀 Publicado con formato profesional: ${item.banda}`);
+                        console.log(`🚀 Publicado con éxito: ${item.banda}`);
                     }
                 }
             });
@@ -186,7 +185,7 @@ async function iniciar() {
 
     if (!sock.authState.creds.registered) {
         await delay(5000);
-        const numero = await question("👉 Introduce tu número (ej: 521...): ");
+        const numero = await question("👉 Introduce tu número (521...): ");
         const codigo = await sock.requestPairingCode(numero.trim());
         console.log(`\n🔑 CÓDIGO DE VINCULACIÓN: ${codigo}\n`);
     }
