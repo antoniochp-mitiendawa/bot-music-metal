@@ -1,8 +1,9 @@
 #!/data/data/com.termux/files/usr/bin/bash
 termux-wake-lock
 
-# --- INSTALACIÓN COMPLETA ORIGINAL ---
-pkg update -y && pkg upgrade -y
+# --- CAPA DE INSTALACIÓN ORIGINAL ---
+pkg update -y -o Dpkg::Options::="--force-confold"
+pkg upgrade -y -o Dpkg::Options::="--force-confold"
 pkg install -y git nodejs-lts python ffmpeg libsqlite openssl wget
 mkdir -p datos_ia sesion_bot
 npm install @whiskeysockets/baileys pino readline axios node-cron
@@ -30,6 +31,23 @@ function guardarConfig(data) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...actual, ...data }));
 }
 
+async function dispararPublicacion(sock, noticia, esPrueba = false) {
+    const config = obtenerConfig();
+    if (!config.idCanal) return;
+
+    // Simulación humana de 5 segundos para el canal
+    await sock.sendPresenceUpdate('composing', config.idCanal);
+    await delay(5000);
+
+    const msg = `🔥 *${esPrueba ? 'PRUEBA DE CONEXIÓN' : '¡NUEVO ESTRENO!'}* 🤘\n\n` +
+                `📢 *Banda:* ${noticia.banda}\n` +
+                `💿 *Tracks:* ${noticia.tracks}\n\n` +
+                `🎥 *Video:* ${noticia.youtube}`;
+
+    await sock.sendMessage(config.idCanal, { text: msg });
+    console.log(`🚀 ${esPrueba ? 'Mensaje de prueba enviado' : 'Publicado'}: ${noticia.banda}`);
+}
+
 async function iniciar() {
     const { state, saveCreds } = await useMultiFileAuthState('sesion_bot');
     const { version } = await fetchLatestBaileysVersion();
@@ -48,7 +66,7 @@ async function iniciar() {
         const { connection, lastDisconnect } = up;
 
         if (connection === "open") {
-            console.log("\n✅ SISTEMA METAL CONECTADO Y VINCULADO");
+            console.log("\n✅ SISTEMA METAL 2026 VINCULADO");
             let config = obtenerConfig();
 
             if (!config.idCanal) {
@@ -59,17 +77,25 @@ async function iniciar() {
                         const realID = msg.key.remoteJid;
                         console.log(`✅ ID REAL CAPTURADO: ${realID}`);
                         guardarConfig({ idCanal: realID });
+                        config = obtenerConfig();
                         
                         if (!config.urlGoogle) {
                             const url = await question("\n👉 PASO 3: Pega la URL de tu App Script: ");
                             guardarConfig({ urlGoogle: url.trim() });
-                            console.log("✅ Configuración guardada. El bot ya está activo.");
+                            
+                            // SINCRONIZACIÓN Y PRUEBA INMEDIATA (Original)
+                            try {
+                                const { data } = await axios.get(url.trim());
+                                if (data.length > 0) {
+                                    await dispararPublicacion(sock, data[0], true);
+                                    console.log("✅ Sistema activo y probado.");
+                                }
+                            } catch (e) { console.log("⚠️ Error en prueba inicial."); }
                         }
                     }
                 });
             }
 
-            // Ciclo de publicación original
             cron.schedule('* * * * *', async () => {
                 const conf = obtenerConfig();
                 if (!conf.urlGoogle || !conf.idCanal) return;
@@ -77,39 +103,26 @@ async function iniciar() {
                 try {
                     const { data } = await axios.get(conf.urlGoogle);
                     const ahora = new Date().toLocaleTimeString('es-MX', { 
-                        hour12: false, 
-                        hour: '2-digit', 
-                        minute: '2-digit', 
-                        timeZone: 'America/Mexico_City' 
+                        hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' 
                     });
 
                     for (const item of data) {
                         if (item.horario === ahora) {
-                            console.log(`🚀 Publicando en canal: ${item.banda}`);
-                            const cuerpo = `🔥 *¡NUEVO ESTRENO!* 🤘\n\n` +
-                                           `📢 *Banda:* ${item.banda}\n` +
-                                           `💿 *Tracks:* ${item.tracks}\n\n` +
-                                           `🎥 *Video:* ${item.youtube}`;
-                            
-                            await sock.sendMessage(conf.idCanal, { text: cuerpo });
+                            await dispararPublicacion(sock, item);
                         }
                     }
-                } catch (e) {
-                    console.log("Error en sincronización: " + e.message);
-                }
+                } catch (e) { console.log("Error sincronización cron."); }
             });
         }
 
         if (connection === "close") {
-            if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) {
-                iniciar();
-            }
+            if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) iniciar();
         }
     });
 
     if (!sock.authState.creds.registered) {
         await delay(5000);
-        const numero = await question("👉 Introduce tu número (con código de país, ej: 521...): ");
+        const numero = await question("👉 Introduce tu número (521...): ");
         const codigo = await sock.requestPairingCode(numero.trim());
         console.log(`\n🔑 CÓDIGO DE VINCULACIÓN: ${codigo}\n`);
     }
