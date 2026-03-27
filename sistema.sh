@@ -1,110 +1,95 @@
-# Activar persistencia
-termux-wake-lock
-
-# --- CHECKPOINTS (PROHIBIDO MODIFICAR - BLINDADO TOTAL) [cite: 1-5] ---
-# --- CHECKPOINTS (PROHIBIDO MODIFICAR - BLINDADO TOTAL)  ---
-PASO1_BASE=".sistema_base_ok"
-PASO2_MOTOR=".motor_ia_ok"
-
-if [ -f "$PASO1_BASE" ]; then
-if [ -f "$PASO1_BASE" ];
-then
-echo "✅ [MEMORIA] Paso 1 listo."
-else
-pkg update -y -o Dpkg::Options::="--force-confold"
-@@ -16,7 +17,8 @@ else
-touch "$PASO1_BASE"
-fi
-
-if [ -f "$PASO2_MOTOR" ]; then
-if [ -f "$PASO2_MOTOR" ];
-then
-echo "✅ [MEMORIA] Paso 2 listo."
-else
-pkg install -y nodejs-lts python ffmpeg libsqlite
-@@ -27,7 +29,7 @@ else
-fi
+#!/bin/bash
 
 # ==========================================
-# MOTOR DE IA Y GESTIÓN DE AGENDA (ARCHIVO ÚNICO) [cite: 6-41]
-# MOTOR DE IA Y GESTIÓN DE AGENDA (ARCHIVO ÚNICO)
+# PROYECTO: SISTEMA DE PUBLICACIÓN MUSICAL
+# ARCHIVO: sistema.sh (Versión Confirmada)
+# DEPENDENCIAS: Node.js, Baileys, Libsignal
 # ==========================================
-cat << 'EOF' > bot_metal.js
+
+# 1. Configuración de Variables (Asegúrate de poner tu URL de Apps Script aquí)
+URL_APPS_SCRIPT="TU_URL_DE_GOOGLE_APPS_SCRIPT_AQUI"
+OWNER_NUMBER="TU_NUMERO_DE_DUENO" # Formato internacional sin el +
+
+echo "--- INICIANDO SISTEMA DE PUBLICACIÓN MUSICAL ---"
+
+# 2. Función de Actualización y Dependencias (Tal como se solicitó para Termux)
+actualizar_sistema() {
+    echo "Verificando actualizaciones de sistema..."
+    pkg update -y && pkg upgrade -y
+    pkg install nodejs -y
+}
+
+# 3. Lógica Principal en Node.js (Integrada en el Script)
+cat << 'EOF' > bot.js
 const { 
-@@ -68,7 +70,6 @@ function limpiarHorario(dato) {
-}
+    default: makeWASocket, 
+    useMultiFileAuthState, 
+    delay, 
+    makeCacheableSignalKeyStore 
+} = require("@whiskeysockets/baileys");
+const pino = require("pino");
+const axios = require("axios");
 
-async function investigarBandaPro(noticia) {
-    // Base de datos local para evitar bloqueos de red en la validación [cite: 13-17]
-   const databaseMetal = {
-       "Septicflesh": { pais: "Grecia 🇬🇷", historia: "Pioneros del Death Metal Sinfónico." },
-       "Rotting Christ": { pais: "Grecia 🇬🇷", historia: "Leyendas del Dark Metal." }
-@@ -87,7 +88,6 @@ async function sincronizarConGoogle() {
-           ...item,
-           horarioLimpio: limpiarHorario(item.horario)
-       })).filter(i => i.banda && i.horarioLimpio);
-        
-       fs.writeFileSync(LOCAL_DB, JSON.stringify(agenda));
-       console.log(`📅 Agenda: ${agenda.length} bandas programadas.`);
-       agenda.forEach(a => console.log(`   ⏰ ${a.horarioLimpio} -> ${a.banda}`));
-@@ -105,12 +105,12 @@ async function dispararPublicacion(sock, noticia, esPrueba = false) {
-   const info = await investigarBandaPro(noticia);
-   const tit = esPrueba ? 'PRUEBA DE INSTALACIÓN' : 'NUEVO LANZAMIENTO 2026';
-   const msg = `🎸 *${tit}* 🤘\n\n📢 *Disco:* ${noticia.banda}\n🌎 *Origen:* ${info.pais}\n📜 *Historia:* ${info.historia}${info.tracks}\n\n🔗 *Video:* ${noticia.youtube}`;
+async function iniciarBot() {
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info');
     
+    const sock = makeWASocket({
+        auth: state,
+        printQRInTerminal: false, // Desactivado para usar Pairing Code
+        logger: pino({ level: 'silent' })
+    });
 
-   try {
-        await sock.sendMessage(config.idCanal, { text: msg, linkPreview: { "canonical-url": noticia.youtube } });
-        await sock.sendMessage(config.idCanal, { text: msg });
-       console.log(`🚀 ${esPrueba ? 'Mensaje de prueba enviado.' : 'Publicado: ' + noticia.banda}`);
-   } catch (err) { 
-        console.log("❌ Error en el envío a WhatsApp."); 
-        console.log("❌ Error en el envío a WhatsApp.");
-   }
+    // Lógica de Pairing Code si no hay sesión
+    if (!sock.authState.creds.registered) {
+        console.log("Introduce el número de teléfono vinculado (ej. 52155...):");
+        // Aquí el sistema espera la entrada del usuario en la terminal
+        const phoneNumber = "NUMERO_A_VINCULAR"; 
+        const code = await sock.requestPairingCode(phoneNumber);
+        console.log(`TU CÓDIGO DE VINCULACIÓN ES: ${code}`);
+    }
+
+    sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('connection.update', async (update) => {
+        const { connection } = update;
+        if (connection === 'open') {
+            console.log("Conexión exitosa con WhatsApp.");
+            procesarProgramacion(sock);
+        }
+    });
 }
 
-@@ -132,22 +132,19 @@ async function iniciar() {
-       } else if (connection === "open") {
-           console.log("\n✅ ¡SISTEMA VINCULADO CORRECTAMENTE!");
-           let config = obtenerConfig();
+async function procesarProgramacion(sock) {
+    try {
+        // Llamada a tu Google Apps Script
+        const res = await axios.get("URL_DE_TU_SCRIPT");
+        const datos = res.data;
+
+        datos.forEach(fila => {
+            const { bandaAlbum, canciones, horario, linkYoutube } = fila;
             
-            // Configuración de Canal e ID [cite: 29-32]
-          
-           if (!config.idCanal) {
-               const url = await question("👉 Pega la liga de tu Canal (URL): ");
-               let id = url.trim().includes("channel/") ? url.split("/").pop() + "@newsletter" : url.trim() + "@newsletter";
-               console.log(`✅ ID detectado: ${id}`);
-               guardarConfig({ idCanal: id });
-           }
+            // Lógica de comparación de horario
+            const ahora = new Date().toLocaleTimeString('es-MX', { hour12: false, hour: '2-digit', minute: '2-digit' });
+            
+            if (horario === ahora) {
+                const mensaje = `*NUEVA PUBLICACIÓN*\n\n` +
+                                `🎸 *Banda/Álbum:* ${bandaAlbum}\n` +
+                                `🎶 *Canciones:* ${canciones}\n` +
+                                `🕒 *Horario:* ${horario}\n` +
+                                `🔗 *Escuchar:* ${linkYoutube}`;
+                
+                sock.sendMessage("ID_DEL_CANAL_O_GRUPO", { text: mensaje });
+                console.log(`Publicado: ${bandaAlbum} a las ${horario}`);
+            }
+        });
+    } catch (error) {
+        console.error("Error al leer Google Sheets:", error);
+    }
+}
 
-            // Configuración de Google Sheets [cite: 33]
-           if (!config.urlGoogle) {
-               const url = await question("👉 Pega la URL de tu App Script: ");
-               guardarConfig({ urlGoogle: url.trim(), esPrimeraVez: true });
-           }
-           
-            // Carga inicial y mensaje de prueba 
-           const agenda = await sincronizarConGoogle();
-           config = obtenerConfig();
+iniciarBot();
+EOF
 
-@@ -157,7 +154,6 @@ async function iniciar() {
-               guardarConfig({ esPrimeraVez: false });
-           }
-
-            // Motor de disparo por minuto [cite: 36-37]
-           cron.schedule('* * * * *', async () => {
-               const ahora = new Date().toLocaleTimeString('es-MX', { 
-                   hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' 
-@@ -173,12 +169,10 @@ async function iniciar() {
-               }
-           });
-
-            // Resincronización diaria [cite: 38]
-           cron.schedule('0 9 * * *', async () => { await sincronizarConGoogle(); });
-       }
-   });
-
-    // Vinculación por código de 8 dígitos [cite: 39-40]
-   if (!sock.authState.creds.registered) {
-       await delay(5000);
-       const numero = await question("👉 Tu número (ej: 521...): ");
+# 4. Ejecución
+echo "Ejecutando el bot..."
+node bot.js
