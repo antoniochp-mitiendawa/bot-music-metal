@@ -1,123 +1,182 @@
 #!/data/data/com.termux/files/usr/bin/bash
+termux-wake-lock
 
-# ======================================================
-# SISTEMA DE GESTIÓN METAL 2026 - VERSIÓN FINAL CONFIRMADA
-# VINCULACIÓN DINÁMICA + APPS SCRIPT JSON MAPPING
-# ======================================================
-
-echo "--- INICIANDO ENTORNO TERMUX ---"
+# --- INSTALACIÓN COMPLETA ---
+# --- INSTALACIÓN COMPLETA ORIGINAL ---
 pkg update -y && pkg upgrade -y
-pkg install nodejs -y
+pkg install -y git nodejs-lts python ffmpeg libsqlite openssl wget
+mkdir -p datos_ia sesion_bot
+@@ -30,81 +30,6 @@ function guardarConfig(data) {
+   fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...actual, ...data }));
+}
 
-mkdir -p bot_metal && cd bot_metal
-
-# Instalación de dependencias si no existen
-if [ ! -f package.json ]; then
-    npm init -y
-    npm install @whiskeysockets/baileys axios pino @adiwajshing/keyed-db readline
-fi
-
-# Creación del archivo index.js (El motor del bot)
-cat << 'EOF' > index.js
-const { 
-    default: makeWASocket, 
-    useMultiFileAuthState, 
-    fetchLatestBaileysVersion 
-} = require("@whiskeysockets/baileys");
-const pino = require("pino");
-const axios = require("axios");
-const readline = require("readline");
-
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-const question = (text) => new Promise((resolve) => rl.question(text, resolve));
-
-async function iniciarSistema() {
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info');
-    const { version } = await fetchLatestBaileysVersion();
-
-    // 1. SOLICITUD DE URL DE IMPLEMENTACIÓN (WEB APP)
-    console.log("\x1b[36m%s\x1b[0m", "\n--- CONFIGURACIÓN SISTEMA METAL ---");
-    const SCRIPT_URL = await question("Pega la URL de la implementación (Apps Script): ");
-
-    const sock = makeWASocket({
-        version,
-        logger: pino({ level: 'silent' }),
-        printQRInTerminal: false,
-        auth: state,
-        browser: ["Ubuntu", "Chrome", "20.0.04"]
-    });
-
-    // 2. EMPAREJAMIENTO (PAIRING CODE)
-    if (!sock.authState.creds.registered) {
-        console.log("\n--- VINCULACIÓN WHATSAPP ---");
-        const phoneNumber = await question("Introduce el número de este teléfono (ej. 521...): ");
-        const code = await sock.requestPairingCode(phoneNumber.trim());
-        console.log(`\nTU CÓDIGO DE VINCULACIÓN ES: \x1b[33m${code}\x1b[0m\n`);
-    }
-
-    sock.ev.on('creds.update', saveCreds);
-
-    let canalId = "";
-
-    // 3. CAPTURA DE ID Y FLUJO DE PRUEBA
-    sock.ev.on('messages.upsert', async m => {
-        const msg = m.messages[0];
-        if (!msg.message || msg.key.fromMe) return;
-
-        if (!canalId) {
-            canalId = msg.key.remoteJid;
-            console.log(`\x1b[32m%s\x1b[0m`, `\nID DE DESTINO CAPTURADO: ${canalId}`);
-            
-            // Realizar prueba inmediata con el formato de tu Apps Script
-            try {
-                const res = await axios.get(SCRIPT_URL.trim());
-                const data = res.data[0]; // Mapeo según tu JSON: banda, youtube, horario, tracks
-
-                const mensajePrueba = `✅ *SISTEMA METAL 2026 - VINCULADO*\n\n` +
-                                      `🎸 *Álbum:* ${data.banda}\n` +
-                                      `🎶 *Tracks:* ${data.tracks}\n` +
-                                      `🕒 *Horario:* ${data.horario}\n` +
-                                      `🔗 *YouTube:* ${data.youtube}`;
-                
-                await sock.sendMessage(canalId, { text: mensajePrueba });
-                console.log("Mensaje de prueba enviado al destino capturado.");
-
-                // 4. MONITOR DE HORARIOS (CADA MINUTO)
-                setInterval(async () => {
-                    const ahora = new Date().toLocaleTimeString('es-MX', { hour12: false, hour: '2-digit', minute: '2-digit' });
-                    try {
-                        const refresh = await axios.get(SCRIPT_URL.trim());
-                        refresh.data.forEach(async (fila) => {
-                            if (fila.horario === ahora) {
-                                const post = `🎸 *NUEVA PUBLICACIÓN*\n\n` +
-                                             `💿 *Álbum:* ${fila.banda}\n\n` +
-                                             `🎶 *Tracks:* \n${fila.tracks}\n\n` +
-                                             `🔗 *Escuchar:* ${fila.youtube}`;
-                                
-                                await sock.sendMessage(canalId, { text: post });
-                                console.log(`Publicado: ${fila.banda} a las ${ahora}`);
-                            }
-                        });
-                    } catch (e) { /* Error silencioso en monitoreo */ }
-                }, 60000);
-
-            } catch (err) {
-                console.log("Error al obtener datos de Google Sheets. Revisa la URL.");
-            }
-        }
-    });
-
-    sock.ev.on('connection.update', (update) => {
-        const { connection } = update;
-        if (connection === 'open') {
-            console.log("\x1b[32m%s\x1b[0m", "\n--- BOT EN LÍNEA ---");
-            console.log("ENVÍA UN MENSAJE DESDE EL CANAL/NEWSLETTER PARA ACTIVAR EL SISTEMA.");
-        }
+// Spintax
+function spintax(texto) {
+    const regex = /\{([^{}]+)\}/g;
+    return texto.replace(regex, (match, grupo) => {
+        const opciones = grupo.split('|');
+        return opciones[Math.floor(Math.random() * opciones.length)];
     });
 }
 
-iniciarSistema();
-EOF
+// Generar mensaje
+function generarMensaje(item, info) {
+    const titulos = ["{🔥 ¡NUEVO ESTRENO! 🤘|⚡ ATENCIÓN METALEROS ⚡|🤘 LANZAMIENTO DESTACADO 🤘|🎸 NOVEDAD METAL 🎸}"];
+    const bandaFormat = ["{📢 *Banda:*|🎸 *Artista:*|🤘 *Agrupación:*}"];
+    const origenFormat = ["{📍 *Origen:*|🌍 *Procedencia:*|🏠 *De:*}"];
+    const generoFormat = ["{🎭 *Género:*|🎸 *Estilo:*|🔊 *Género:*}"];
+    const bioFormat = ["{📖 *Biografía:*|🔍 *Sobre la banda:*|📜 *Historia:*}"];
+    const videoFormat = ["{🎥 *Video:*|▶️ *Escúchalo:*|🔗 *Mira el video:*}"];
+    
+    let msg = `${spintax(titulos)}\n\n`;
+    msg += `${spintax(bandaFormat)} ${item.banda}\n`;
+    if (info.pais) msg += `${spintax(origenFormat)} ${info.pais}\n`;
+    if (info.genero) msg += `${spintax(generoFormat)} ${info.genero}\n`;
+    if (info.biografia) msg += `\n${spintax(bioFormat)}\n${info.biografia}\n`;
+    msg += `\n${spintax(videoFormat)} ${item.youtube}`;
+    return msg;
+}
 
-echo "Lanzando el bot..."
-node index.js
+// Buscar en Wikipedia
+async function buscarWikipedia(bandaNombre) {
+    try {
+        const busqueda = encodeURIComponent(bandaNombre);
+        const res = await axios.get(`https://es.wikipedia.org/api/rest_v1/page/summary/${busqueda}`, { timeout: 8000 });
+        if (res.data && res.data.extract) {
+            const texto = res.data.extract;
+            let pais = "", genero = "";
+            const paises = ["México","Argentina","España","Chile","Colombia","Perú","Brasil","Alemania","Suecia","Noruega","Finlandia","Estados Unidos","Reino Unido","Grecia","Italia","Francia","Canadá","Australia","Japón"];
+            const generos = ["Death Metal","Black Metal","Thrash Metal","Heavy Metal","Power Metal","Doom Metal","Symphonic Metal","Folk Metal","Gothic Metal","Progressive Metal","Metal","Rock"];
+            for (const p of paises) if (texto.includes(p)) { pais = p; break; }
+            for (const g of generos) if (texto.includes(g)) { genero = g; break; }
+            const biografia = texto.length > 400 ? texto.substring(0,400)+"..." : texto;
+            if (pais || genero || biografia) return { pais, genero, biografia };
+        }
+        return null;
+    } catch(e) { return null; }
+}
+
+// Buscar en DuckDuckGo
+async function buscarDuckDuckGo(bandaNombre) {
+    try {
+        const busqueda = encodeURIComponent(`${bandaNombre} biografía género país`);
+        const res = await axios.get(`https://api.duckduckgo.com/?q=${busqueda}&format=json&no_html=1&skip_disambig=1`, { timeout: 8000 });
+        if (res.data && res.data.Abstract) {
+            const texto = res.data.Abstract;
+            let pais = "", genero = "";
+            const paises = ["México","Argentina","España","Chile","Colombia","Perú","Brasil","Alemania","Suecia","Noruega","Finlandia","Estados Unidos","Reino Unido","Grecia","Italia","Francia","Canadá","Australia","Japón"];
+            const generos = ["Death Metal","Black Metal","Thrash Metal","Heavy Metal","Power Metal","Doom Metal","Symphonic Metal","Folk Metal","Gothic Metal","Progressive Metal","Metal","Rock"];
+            for (const p of paises) if (texto.includes(p)) { pais = p; break; }
+            for (const g of generos) if (texto.includes(g)) { genero = g; break; }
+            const biografia = texto.length > 400 ? texto.substring(0,400)+"..." : texto;
+            if (pais || genero || biografia) return { pais, genero, biografia };
+        }
+        return null;
+    } catch(e) { return null; }
+}
+
+async function enriquecerBanda(bandaNombre) {
+    console.log(`🔍 Buscando: ${bandaNombre}`);
+    let info = await buscarWikipedia(bandaNombre);
+    if (info) return info;
+    info = await buscarDuckDuckGo(bandaNombre);
+    if (info) return info;
+    console.log(`⚠️ No se encontró info para: ${bandaNombre}`);
+    return null;
+}
+
+async function iniciar() {
+   const { state, saveCreds } = await useMultiFileAuthState('sesion_bot');
+   const { version } = await fetchLatestBaileysVersion();
+@@ -119,63 +44,58 @@ async function iniciar() {
+
+   sock.ev.on("creds.update", saveCreds);
+
+    // PRIMERO: Si no está vinculado, pedir número y mostrar código
+    if (!state.creds.registered) {
+        await delay(5000);
+        const numero = await question("👉 Introduce tu número (con código de país, ej: 521...): ");
+        const codigo = await sock.requestPairingCode(numero.trim());
+        console.log(`\n🔑 CÓDIGO DE VINCULACIÓN: ${codigo}\n`);
+    }
+
+   sock.ev.on("connection.update", async (up) => {
+       const { connection, lastDisconnect } = up;
+
+       if (connection === "open") {
+           console.log("\n✅ SISTEMA METAL CONECTADO Y VINCULADO");
+           let config = obtenerConfig();
+
+            // SEGUNDO: Capturar ID del canal si no existe
+           if (!config.idCanal) {
+                console.log("\n👉 Envía un mensaje a tu CANAL para capturar el ID.");
+                console.log("\n👉 PASO 2: Envía un mensaje a tu CANAL para capturar el ID.");
+               sock.ev.on("messages.upsert", async (m) => {
+                   const msg = m.messages[0];
+                   if (msg.key.remoteJid.endsWith("@newsletter") && !config.idCanal) {
+                       const realID = msg.key.remoteJid;
+                       console.log(`✅ ID REAL CAPTURADO: ${realID}`);
+                       guardarConfig({ idCanal: realID });
+                       
+                        // TERCERO: Pedir URL de Google Sheets
+                       if (!config.urlGoogle) {
+                            const url = await question("\n👉 Pega la URL de tu App Script: ");
+                            const url = await question("\n👉 PASO 3: Pega la URL de tu App Script: ");
+                           guardarConfig({ urlGoogle: url.trim() });
+                           console.log("✅ Configuración guardada. El bot ya está activo.");
+                       }
+                   }
+               });
+           }
+
+            // CUARTO: Iniciar ciclo de publicación
+            // Ciclo de publicación original
+           cron.schedule('* * * * *', async () => {
+               const conf = obtenerConfig();
+               if (!conf.urlGoogle || !conf.idCanal) return;
+
+               try {
+                   const { data } = await axios.get(conf.urlGoogle);
+                   const ahora = new Date().toLocaleTimeString('es-MX', { 
+                        hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' 
+                        hour12: false, 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        timeZone: 'America/Mexico_City' 
+                   });
+
+                   for (const item of data) {
+                       if (item.horario === ahora) {
+                            console.log(`🚀 Publicando: ${item.banda}`);
+                            const bandaNombre = item.banda.split(" - ")[0];
+                            const info = await enriquecerBanda(bandaNombre);
+                            const cuerpo = generarMensaje(item, info || {});
+                            console.log(`🚀 Publicando en canal: ${item.banda}`);
+                            const cuerpo = `🔥 *¡NUEVO ESTRENO!* 🤘\n\n` +
+                                           `📢 *Banda:* ${item.banda}\n` +
+                                           `💿 *Tracks:* ${item.tracks}\n\n` +
+                                           `🎥 *Video:* ${item.youtube}`;
+                            
+                           await sock.sendMessage(conf.idCanal, { text: cuerpo });
+                       }
+                   }
+               } catch (e) {
+                    console.log("Error: " + e.message);
+                    console.log("Error en sincronización: " + e.message);
+               }
+           });
+       }
+@@ -186,6 +106,13 @@ async function iniciar() {
+           }
+       }
+   });
+
+    if (!sock.authState.creds.registered) {
+        await delay(5000);
+        const numero = await question("👉 Introduce tu número (con código de país, ej: 521...): ");
+        const codigo = await sock.requestPairingCode(numero.trim());
+        console.log(`\n🔑 CÓDIGO DE VINCULACIÓN: ${codigo}\n`);
+    }
+}
+
+iniciar();
