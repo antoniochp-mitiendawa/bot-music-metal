@@ -118,4 +118,4 @@ async function iniciar() {
 iniciar();
 EOF
 
-node bot_met
+node bot_metal.js
