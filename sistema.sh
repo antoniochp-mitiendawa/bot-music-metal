@@ -20,7 +20,22 @@ const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 const CONFIG_PATH = "./datos_ia/config.json";
 const AGENDA_PATH = "./datos_ia/agenda.json";
 
-// --- FUNCIONES DE PERSISTENCIA (BLINDADAS) ---
+// --- DICCIONARIO DE BANDERAS (NORMALIZACIÓN) ---
+const obtenerBandera = (pais) => {
+    if (!pais) return "🌍";
+    const p = pais.toLowerCase().trim();
+    const banderas = {
+        "mexico": "🇲🇽", "méxico": "🇲🇽", "usa": "🇺🇸", "eeuu": "🇺🇸", "united states": "🇺🇸",
+        "germany": "🇩🇪", "alemania": "🇩🇪", "sweden": "🇸🇪", "suecia": "🇸🇪", "norway": "🇳🇴", "noruega": "🇳🇴",
+        "finland": "🇫🇮", "finlandia": "🇫🇮", "brazil": "🇧🇷", "brasil": "🇧🇷", "uk": "🇬🇧", "reino unido": "🇬🇧",
+        "england": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "greece": "🇬🇷", "grecia": "🇬🇷", "france": "🇫🇷", "francia": "🇫🇷",
+        "italy": "🇮🇹", "italia": "🇮🇹", "spain": "🇪🇸", "españa": "🇪🇸", "canada": "🇨🇦", "canadá": "🇨🇦",
+        "australia": "🇦🇺", "argentina": "🇦🇷", "chile": "🇨🇱", "colombia": "🇨🇴", "poland": "🇵🇱", "polonia": "🇵🇱"
+    };
+    return banderas[p] || "🌍";
+};
+
+// --- FUNCIONES DE PERSISTENCIA ---
 function obtenerConfig() {
     if (!fs.existsSync(CONFIG_PATH)) return {};
     return JSON.parse(fs.readFileSync(CONFIG_PATH));
@@ -31,7 +46,7 @@ function guardarConfig(data) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...actual, ...data }, null, 2));
 }
 
-// --- FUNCIONES DE VARIEDAD (SPINTAX) ---
+// --- SPINTAX LIMPIO (SIN EMOJIS INTERNOS) ---
 function spintax(text) {
     return text.replace(/{([^{}]+)}/g, (match, options) => {
         const choices = options.split('|');
@@ -44,22 +59,17 @@ const r = () => {
     return emojis[Math.floor(Math.random() * emojis.length)];
 };
 
-const evideo = () => {
-    const emjV = ["🎥", "🎬", "📺", "📼", "📀"];
-    return emjV[Math.floor(Math.random() * emjV.length)];
-};
-
-// --- SINCRONIZACIÓN INTELIGENTE (GOOGLE SHEETS) ---
+// --- SINCRONIZACIÓN ÚNICA (8:00 AM) ---
 async function sincronizarAgenda(url) {
     if (!url) return;
     try {
-        console.log("📥 [8:00 AM] Sincronizando agenda desde Google Sheets...");
+        console.log("📥 [Sincronización] Consultando Google Sheets...");
         const { data } = await axios.get(url);
         fs.writeFileSync(AGENDA_PATH, JSON.stringify(data, null, 2));
-        console.log("✅ Datos guardados localmente. No habrá más peticiones a Google hoy.");
+        console.log("✅ Agenda actualizada y guardada localmente.");
         return data;
     } catch (e) {
-        console.log("❌ Error de red: Usando base de datos local.");
+        console.log("⚠️ Error de conexión: Usando caché local.");
         return fs.existsSync(AGENDA_PATH) ? JSON.parse(fs.readFileSync(AGENDA_PATH)) : [];
     }
 }
@@ -82,25 +92,24 @@ async function iniciar() {
         const { connection, lastDisconnect } = up;
 
         if (connection === "open") {
-            console.log("\n✅ SISTEMA METAL CONECTADO Y VINCULADO");
+            console.log("\n✅ SISTEMA METAL " + 2026 + " CONECTADO");
             let config = obtenerConfig();
 
-            // Sincronización inicial solo si no hay agenda
+            // Sincronización inicial si no existe archivo local
             if (!fs.existsSync(AGENDA_PATH) && config.urlGoogle) {
                 await sincronizarAgenda(config.urlGoogle);
             }
 
             if (!config.idCanal) {
-                console.log("\n👉 PASO 2: Envía un mensaje a tu CANAL para capturar el ID.");
+                console.log("\n👉 PASO 2: Envía un mensaje a tu CANAL...");
                 const mensajeHandler = async (m) => {
                     const msg = m.messages[0];
                     if (msg.key.remoteJid.endsWith("@newsletter")) {
                         const realID = msg.key.remoteJid;
-                        console.log(`✅ ID REAL CAPTURADO: ${realID}`);
                         guardarConfig({ idCanal: realID });
-                        let configActualizada = obtenerConfig();
-                        if (!configActualizada.urlGoogle) {
-                            const url = await question("\n👉 PASO 3: Pega la URL de tu App Script: ");
+                        let configAct = obtenerConfig();
+                        if (!configAct.urlGoogle) {
+                            const url = await question("\n👉 PASO 3: URL App Script: ");
                             guardarConfig({ urlGoogle: url.trim() });
                             await sincronizarAgenda(url.trim());
                         }
@@ -110,52 +119,53 @@ async function iniciar() {
                 sock.ev.on("messages.upsert", mensajeHandler);
             }
 
-            // CRON 1: Sincronización ÚNICA a las 8:00 AM
+            // --- CRON: SINCRONIZAR SOLO A LAS 8:00 AM ---
             cron.schedule('0 8 * * *', async () => {
                 const conf = obtenerConfig();
                 await sincronizarAgenda(conf.urlGoogle);
             });
 
-            // CRON 2: Verificación de publicaciones (Cada minuto en local)
+            // --- CRON: PUBLICACIÓN MINUTO A MINUTO ---
             cron.schedule('* * * * *', async () => {
                 const conf = obtenerConfig();
                 if (!fs.existsSync(AGENDA_PATH) || !conf.idCanal) return;
 
-                const agendaLocal = JSON.parse(fs.readFileSync(AGENDA_PATH));
+                const agenda = JSON.parse(fs.readFileSync(AGENDA_PATH));
                 const ahora = new Date().toLocaleTimeString('es-MX', { 
                     hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' 
                 });
 
-                for (const item of agendaLocal) {
+                for (const item of agenda) {
                     if (item.horario === ahora) {
-                        console.log(`🚀 Iniciando secuencia para: ${item.banda}`);
+                        console.log(`🚀 Publicando estreno: ${item.banda}`);
                         
-                        // Typing y Delay de 14 segundos
+                        // Estado "Escribiendo" por 14 segundos
                         await sock.sendPresenceUpdate('composing', conf.idCanal);
                         await delay(14000);
 
-                        // Spintax y Variedad
-                        const txt = spintax("{🔥 ¡NUEVO ESTRENO!|🤘 ¡NOTICIA METALERA!|🎸 RECIÉN SALIDO|💀 METAL ALERT|⚡ NOVEDAD RECOMENDADA}");
-                        const bnd = spintax("{📢 Banda|🎸 Grupo|🔥 Artista|🌑 Proyecto}");
-                        const trk = spintax("{💿 Tracks|🎶 Lista de canciones|🎼 Repertorio|⛓️ Canciones}");
-                        const vtxt = spintax("{Ver video oficial aquí:|Haz clic para el estreno:|Liga del video oficial:|Disfruta el nuevo material:}");
+                        // Spintax Sin Emojis (Limpieza Total)
+                        const titulo = spintax("{NUEVO ESTRENO|NOTICIA METALERA|RECIÉN SALIDO|METAL ALERT|NOVEDAD RECOMENDADA}");
+                        const etiquetaBanda = spintax("{Banda|Grupo|Artista|Proyecto}");
+                        const etiquetaOrigen = spintax("{Origen|Desde|Procedencia|País}");
+                        const bandera = obtenerBandera(item.tracks); // Usamos la columna 'tracks' para el País
 
-                        // Construcción con Jerarquía (Link arriba + 3 espacios)
-                        const cuerpo = `${r()} *${txt}*\n\n\n` + 
-                                       `${evideo()} _${vtxt}_\n` +
-                                       `${item.youtube}\n\n` + 
-                                       `${r()} *${bnd}:* ${item.banda}\n` +
-                                       `${r()} *${trk}:* ${item.tracks}`;
+                        // Estética: 1 solo emoji por línea + Triple Espacio
+                        const cuerpo = `${r()} *${titulo}*\n\n\n` +
+                                       `🎥 *Video Oficial:*\n` +
+                                       `${item.youtube}\n` +
+                                       `_(Toca el link azul de arriba para reproducir 👆)_\n\n` +
+                                       `${r()} *${etiquetaBanda}:* ${item.banda}\n` +
+                                       `${bandera} *${etiquetaOrigen}:* ${item.tracks}`;
 
                         await sock.sendMessage(conf.idCanal, { 
                             text: cuerpo,
                             contextInfo: {
                                 externalAdReply: {
                                     title: item.banda,
-                                    body: "Reproducir ahora",
+                                    body: "Ver Estreno en YouTube",
                                     mediaType: 1,
                                     sourceUrl: item.youtube,
-                                    thumbnailUrl: "https://img.youtube.com/vi/" + (item.youtube.split('v=')[1] || "").split('&')[0] + "/0.jpg"
+                                    thumbnailUrl: "https://img.youtube.com/vi/" + (item.youtube.split('v=')[1] || "").split('&')[0] + "/maxresdefault.jpg"
                                 }
                             }
                         });
