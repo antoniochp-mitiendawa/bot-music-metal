@@ -20,28 +20,22 @@ const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 const CONFIG_PATH = "./datos_ia/config.json";
 const AGENDA_PATH = "./datos_ia/agenda.json";
 
-// --- MOTOR UNIVERSAL DE BANDERAS (COBERTURA MUNDIAL EN ESPAÑOL) ---
+// --- DICCIONARIO DE BANDERAS (NORMALIZACIÓN) ---
 const obtenerBandera = (pais) => {
     if (!pais) return "🌍";
-    const p = pais.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    const p = pais.toLowerCase().trim();
     const banderas = {
-        "afganistan": "🇦🇫", "albania": "🇦🇱", "alemania": "🇩🇪", "andorra": "🇦🇩", "angola": "🇦🇴", "antigua y barbuda": "🇦🇬", "arabia saudita": "🇸🇦", "argelia": "🇩🇿", "argentina": "🇦🇷", "armenia": "🇦🇲", "australia": "🇦🇺", "austria": "🇦🇹", "azerbaiyan": "🇦🇿",
-        "bahamas": "🇧🇸", "banglades": "🇧🇩", "barbados": "🇧🇧", "barein": "🇧🇭", "belgica": "🇧🇪", "belice": "🇧🇿", "benin": "🇧🇯", "bielorrusia": "🇧🇾", "birmania": "🇲🇲", "bolivia": "🇧🇴", "bosnia y herzegovina": "🇧🇦", "botsuana": "🇧🇼", "brasil": "🇧🇷", "brunei": "🇧🇳", "bulgaria": "🇧🇬", "burkina faso": "🇧🇫", "burundi": "🇧🇮", "butan": "🇧🇹",
-        "cabo verde": "🇨🇻", "camboya": "🇰🇭", "camerun": "🇨🇲", "canada": "🇨🇦", "catar": "🇶🇦", "chad": "🇹🇩", "chile": "🇨🇱", "china": "🇨🇳", "chipre": "🇨🇾", "colombia": "🇨🇴", "comoras": "🇰🇲", "congo": "🇨🇬", "corea del norte": "🇰🇵", "corea del sur": "🇰🇷", "costa de marfil": "🇨🇮", "costa rica": "🇨🇷", "croacia": "🇭🇷", "cuba": "🇨🇺",
-        "dinamarca": "🇩🇰", "dominica": "🇩🇲", "ecuador": "🇪🇨", "egipto": "🇪🇬", "el salvador": "🇸🇻", "emiratos arabes unidos": "🇦🇪", "eritrea": "🇪🇷", "eslovaquia": "🇸🇰", "eslovenia": "🇸🇮", "espana": "🇪🇸", "estados unidos": "🇺🇸", "eeuu": "🇺🇸", "usa": "🇺🇸", "estonia": "🇪🇪", "etiopia": "🇪🇹",
-        "filipinas": "🇵🇭", "finlandia": "🇫🇮", "fiyi": "🇫🇯", "francia": "🇫🇷", "gabon": "🇬🇦", "gambia": "🇬🇲", "georgia": "🇬🇪", "ghana": "🇬🇭", "granada": "🇬🇩", "grecia": "🇬🇷", "guatemala": "🇬🇹", "guinea": "🇬🇳", "guinea ecuatorial": "🇬🇶", "guinea-bisau": "🇬🇼", "guyana": "🇬🇾",
-        "haiti": "🇭🇹", "honduras": "🇭🇳", "hungria": "🇭🇺", "india": "🇮🇳", "indonesia": "🇮🇩", "iraq": "🇮🇶", "iran": "🇮🇷", "irlanda": "🇮🇪", "islandia": "🇮🇸", "islas marshall": "🇲🇭", "islas salomon": "🇸🇧", "israel": "🇮🇱", "italia": "🇮🇹",
-        "jamaica": "🇯🇲", "japon": "🇯🇵", "jordania": "🇯🇴", "kazajistan": "🇰🇿", "kenia": "🇰🇪", "kirguistan": "🇰🇬", "kiribati": "🇰🇮", "kuwait": "🇰🇼", "laos": "🇱🇦", "lesoto": "🇱🇸", "letonia": "🇱🇻", "libano": "🇱🇧", "liberia": "🇱🇷", "libia": "🇱🇾", "liechtenstein": "🇱🇮", "lituania": "🇱🇹", "luxemburgo": "🇱🇺",
-        "macedonia del norte": "🇲🇰", "madagascar": "🇲🇬", "malasia": "🇲🇾", "malaui": "🇲🇼", "maldivas": "🇲🇻", "mali": "🇲🇲", "malta": "🇲🇹", "marruecos": "🇲🇦", "mauricio": "🇲🇺", "mauritania": "🇲🇷", "mexico": "🇲🇽", "micronesia": "🇫🇲", "moldavia": "🇲🇩", "monaco": "🇲🇨", "mongolia": "🇲🇳", "montenegro": "🇲🇪", "mozambique": "🇲🇿",
-        "namibia": "🇳🇦", "nauru": "🇳🇷", "nepal": "🇳🇵", "nicaragua": "🇳🇮", "niger": "🇳🇪", "nigeria": "🇳🇬", "noruega": "🇳🇴", "nueva zelanda": "🇳🇿", "oman": "🇴🇲", "paises bajos": "🇳🇱", "holanda": "🇳🇱", "pakistan": "🇵🇰", "palaos": "🇵🇼", "panama": "🇵🇦", "papua nueva guinea": "🇵🇬", "paraguay": "🇵🇾", "peru": "🇵🇪", "polonia": "🇵🇱", "portugal": "🇵🇹",
-        "reino unido": "🇬🇧", "uk": "🇬🇧", "inglaterra": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "republica centroafricana": "🇨🇫", "republica checa": "🇨🇿", "chequia": "🇨🇿", "checoslovaquia": "🇨🇿", "republica dominicana": "🇩🇴", "ruanda": "🇷🇼", "rumania": "🇷🇴", "rusia": "🇷🇺",
-        "samoa": "🇼🇸", "san cristobal y nieves": "🇰🇳", "san marino": "🇸🇲", "san vicente y las granadinas": "🇻🇨", "santa lucia": "🇱🇨", "santo tome y principe": "🇸🇹", "senegal": "🇸🇳", "serbia": "🇷🇸", "seychelles": "🇸🇨", "sierra leona": "🇸🇱", "singapur": "🇸🇬", "siria": "🇸🇾", "somalia": "🇸🇴", "sri lanka": "🇱🇰", "sudafrica": "🇿🇦", "sudan": "🇸🇩", "suecia": "🇸🇪", "suiza": "🇨🇭", "surinam": "🇸🇷",
-        "tailandia": "🇹🇭", "taiwan": "🇹🇼", "tanzania": "🇹🇿", "tayikistan": "🇹🇯", "timor oriental": "🇹🇱", "togo": "🇹🇬", "tonga": "🇹🇴", "trinidad y tobago": "🇹🇹", "tunez": "🇹🇳", "turkmenistan": "🇹🇲", "turquia": "🇹🇷", "tuvalu": "🇹🇻", "ucrania": "🇺🇦", "uganda": "🇺🇬", "uruguay": "🇺🇾", "uzbekistan": "🇺🇿",
-        "vanuatu": "🇻🇺", "vaticano": "🇻🇦", "venezuela": "🇻🇪", "vietnam": "🇻🇳", "yemen": "🇾🇪", "yibuti": "🇩🇯", "zambia": "🇿🇲", "zimbabue": "🇿🇼"
+        "mexico": "🇲🇽", "méxico": "🇲🇽", "usa": "🇺🇸", "eeuu": "🇺🇸", "united states": "🇺🇸",
+        "germany": "🇩🇪", "alemania": "🇩🇪", "sweden": "🇸🇪", "suecia": "🇸🇪", "norway": "🇳🇴", "noruega": "🇳🇴",
+        "finland": "🇫🇮", "finlandia": "🇫🇮", "brazil": "🇧🇷", "brasil": "🇧🇷", "uk": "🇬🇧", "reino unido": "🇬🇧",
+        "england": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "greece": "🇬🇷", "grecia": "🇬🇷", "france": "🇫🇷", "francia": "🇫🇷",
+        "italy": "🇮🇹", "italia": "🇮🇹", "spain": "🇪🇸", "españa": "🇪🇸", "canada": "🇨🇦", "canadá": "🇨🇦",
+        "australia": "🇦🇺", "argentina": "🇦🇷", "chile": "🇨🇱", "colombia": "🇨🇴", "poland": "🇵🇱", "polonia": "🇵🇱"
     };
-    return banderas[p] || "🌐";
+    return banderas[p] || "🌍";
 };
 
+// --- FUNCIONES DE PERSISTENCIA ---
 function obtenerConfig() {
     if (!fs.existsSync(CONFIG_PATH)) return {};
     return JSON.parse(fs.readFileSync(CONFIG_PATH));
@@ -52,6 +46,7 @@ function guardarConfig(data) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...actual, ...data }, null, 2));
 }
 
+// --- SPINTAX LIMPIO (SIN EMOJIS INTERNOS) ---
 function spintax(text) {
     return text.replace(/{([^{}]+)}/g, (match, options) => {
         const choices = options.split('|');
@@ -59,11 +54,77 @@ function spintax(text) {
     });
 }
 
+const obtenerEmoji = () => {
+    const emojis = ["🤘", "🔥", "🎸", "💀", "⚰️", "⚡", "🥁", "🌑", "⛓️", "🔊"];
 const r = () => {
-    const emojis = ["🤘", "🔥", "🎸", "💀", "⚡", "🥁", "🌑", "⛓️"];
+   const emojis = ["🤘", "🔥", "🎸", "💀", "⚡", "🥁", "🌑", "⛓️"];
+   return emojis[Math.floor(Math.random() * emojis.length)];
     return emojis[Math.floor(Math.random() * emojis.length)];
 };
 
+@@ -49,12 +49,11 @@ async function sincronizarAgenda(url) {
+       console.log("📥 Sincronizando agenda desde Google Sheets...");
+       const { data } = await axios.get(url);
+       fs.writeFileSync(AGENDA_PATH, JSON.stringify(data, null, 2));
+        console.log("✅ Agenda guardada localmente en el teléfono.");
+        console.log("✅ Agenda guardada localmente.");
+       return data;
+   } catch (e) {
+       console.log("❌ Error al sincronizar: " + e.message);
+       if (fs.existsSync(AGENDA_PATH)) {
+            console.log("⚠️ Usando última agenda guardada localmente.");
+           return JSON.parse(fs.readFileSync(AGENDA_PATH));
+       }
+       return [];
+@@ -94,7 +93,6 @@ async function iniciar() {
+                       if (!configActualizada.urlGoogle) {
+                           const url = await question("\n👉 PASO 3: Pega la URL de tu App Script: ");
+                           guardarConfig({ urlGoogle: url.trim() });
+                            console.log("✅ Configuración guardada.");
+                           await sincronizarAgenda(url.trim());
+                       }
+                       sock.ev.off("messages.upsert", mensajeHandler);
+@@ -107,11 +105,11 @@ async function iniciar() {
+               await sincronizarAgenda(url.trim());
+           }
+
+            console.log("📅 Cargando agenda local del teléfono...");
+           if (config.urlGoogle) {
+               await sincronizarAgenda(config.urlGoogle);
+           }
+
+            // --- LÓGICA DE PUBLICACIÓN PROGRAMADA ---
+           cron.schedule('* * * * *', async () => {
+               const conf = obtenerConfig();
+               if (!fs.existsSync(AGENDA_PATH) || !conf.idCanal) return;
+@@ -123,25 +121,24 @@ async function iniciar() {
+
+               for (const item of agendaLocal) {
+                   if (item.horario === ahora) {
+                        console.log(`🚀 Iniciando secuencia de publicación para: ${item.banda}`);
+                        console.log(`🚀 Preparando publicación: ${item.banda}`);
+
+                        // 1. Activar estado "Escribiendo..."
+                        // 1. Activar estado Typing
+                       await sock.sendPresenceUpdate('composing', conf.idCanal);
+
+                        // 2. Espera de 14 segundos para realismo y previsualización nativa
+                        // 2. Retraso de 14 segundos para previsualización nativa
+                       await delay(14000);
+
+                        // 3. Construcción del mensaje con Spintax y Emojis
+                        const intro = spintax("{🔥 ¡NUEVO ESTRENO!|🤘 ¡NOTICIA METALERA!|🎸 RECIÉN SALIDO DEL HORNO|💀 METAL ALERT|⚡ NOVEDAD RECOMENDADA}");
+                        const labelBanda = spintax("{📢 Banda|🎸 Grupo|🔥 Artista|🌑 Proyecto}");
+                        const labelTracks = spintax("{💿 Tracks|🎶 Lista de canciones|🎼 Temas|⛓️ Repertorio}");
+
+                        const cuerpo = `${obtenerEmoji()} *${intro}* ${obtenerEmoji()}\n\n` +
+                                       `${obtenerEmoji()} *${labelBanda}:* ${item.banda}\n` +
+                                       `${obtenerEmoji()} *${labelTracks}:* ${item.tracks}\n\n` +
+                                       `🎥 *Video:* ${item.youtube}`;
+                        // 3. Construcción del Mensaje (Nueva Jerarquía: Link Arriba)
+                        const intro = spintax("{🔥 ¡NUEVO ESTRENO!|🤘 ¡NOTICIA METALERA!|🎸 RECIÉN SALIDO|💀 METAL ALERT|⚡ NOVEDAD RECOMENDADA}");
+                        const emojiCabecera = obtenerEmoji();
+// --- SINCRONIZACIÓN ÚNICA (8:00 AM) ---
 async function sincronizarAgenda(url) {
     if (!url) return;
     try {
@@ -99,6 +160,7 @@ async function iniciar() {
             console.log("\n✅ SISTEMA METAL " + 2026 + " CONECTADO");
             let config = obtenerConfig();
 
+            // Sincronización inicial si no existe archivo local
             if (!fs.existsSync(AGENDA_PATH) && config.urlGoogle) {
                 await sincronizarAgenda(config.urlGoogle);
             }
@@ -109,7 +171,6 @@ async function iniciar() {
                     const msg = m.messages[0];
                     if (msg.key.remoteJid.endsWith("@newsletter")) {
                         const realID = msg.key.remoteJid;
-                        console.log(`🆔 ID DEL CANAL DETECTADO: ${realID}`);
                         guardarConfig({ idCanal: realID });
                         let configAct = obtenerConfig();
                         if (!configAct.urlGoogle) {
@@ -123,11 +184,13 @@ async function iniciar() {
                 sock.ev.on("messages.upsert", mensajeHandler);
             }
 
+            // --- CRON: SINCRONIZAR SOLO A LAS 8:00 AM ---
             cron.schedule('0 8 * * *', async () => {
                 const conf = obtenerConfig();
                 await sincronizarAgenda(conf.urlGoogle);
             });
 
+            // --- CRON: PUBLICACIÓN MINUTO A MINUTO ---
             cron.schedule('* * * * *', async () => {
                 const conf = obtenerConfig();
                 if (!fs.existsSync(AGENDA_PATH) || !conf.idCanal) return;
@@ -140,31 +203,45 @@ async function iniciar() {
                 for (const item of agenda) {
                     if (item.horario === ahora) {
                         console.log(`🚀 Publicando estreno: ${item.banda}`);
-                        
+                       
+                        const cuerpo = `${emojiCabecera} *${intro}*\n` +
+                                       `${item.youtube}\n\n` + // Link arriba para forzar preview
+                                       `🎸 *Banda:* ${item.banda}\n` +
+                                       `💿 *Tracks:* ${item.tracks}`;
+                        // Estado "Escribiendo" por 14 segundos
                         await sock.sendPresenceUpdate('composing', conf.idCanal);
                         await delay(14000);
 
-                        const videoID = (item.youtube.split('v=')[1] || "").split('&')[0];
-                        const imgUrl = `https://img.youtube.com/vi/${videoID}/maxresdefault.jpg`;
-                        
+                        // Spintax Sin Emojis (Limpieza Total)
                         const titulo = spintax("{NUEVO ESTRENO|NOTICIA METALERA|RECIÉN SALIDO|METAL ALERT|NOVEDAD RECOMENDADA}");
                         const etiquetaBanda = spintax("{Banda|Grupo|Artista|Proyecto}");
                         const etiquetaOrigen = spintax("{Origen|Desde|Procedencia|País}");
-                        const guiaAccion = spintax("{👇 Mira el video oficial aquí|⬇️ Disfruta el video en este enlace|👇 Dale play al estreno oficial}");
-                        const bandera = obtenerBandera(item.tracks);
+                        const bandera = obtenerBandera(item.tracks); // Usamos la columna 'tracks' para el País
 
+                        // Estética: 1 solo emoji por línea + Triple Espacio
                         const cuerpo = `${r()} *${titulo}*\n\n\n` +
-                                       `${guiaAccion}:\n` +
-                                       `${item.youtube}\n\n` +
+                                       `🎥 *Video Oficial:*\n` +
+                                       `${item.youtube}\n` +
+                                       `_(Toca el link azul de arriba para reproducir 👆)_\n\n` +
                                        `${r()} *${etiquetaBanda}:* ${item.banda}\n` +
                                        `${bandera} *${etiquetaOrigen}:* ${item.tracks}`;
 
-                        // --- CAMBIO: ENVÍO DE IMAGEN PURA (SIN TARJETA) ---
                         await sock.sendMessage(conf.idCanal, { 
-                            image: { url: imgUrl },
-                            caption: cuerpo 
+                            text: cuerpo,
+                            contextInfo: {
+                                externalAdReply: {
+                                    title: item.banda,
+                                    body: "Ver Estreno en YouTube",
+                                    mediaType: 1,
+                                    sourceUrl: item.youtube,
+                                    thumbnailUrl: "https://img.youtube.com/vi/" + (item.youtube.split('v=')[1] || "").split('&')[0] + "/maxresdefault.jpg"
+                                }
+                            }
                         });
 
+                        // 4. Envío de texto plano (WhatsApp generará el preview automáticamente)
+                        // 4. Envío de texto plano (WhatsApp detecta el link arriba)
+                       await sock.sendMessage(conf.idCanal, { text: cuerpo });
                         await sock.sendPresenceUpdate('paused', conf.idCanal);
                         await delay(2000);
                     }
@@ -172,14 +249,24 @@ async function iniciar() {
             });
         }
 
-        if (connection === "close" && lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) {
-            iniciar();
+                       // 5. Finalizar estado de presencia
+@@ -162,7 +159,7 @@ async function iniciar() {
+        if (connection === "close") {
+            if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) {
+                iniciar();
+            }
         }
     });
 
+   if (!sock.authState.creds.registered) {
+       await delay(5000);
+        const numero = await question("👉 Introduce tu número (con código de país, ej: 521...): ");
     if (!sock.authState.creds.registered) {
         await delay(5000);
-        const numero = await question("👉 Introduce tu número (521...): ");
+       const numero = await question("👉 Introduce tu número (521...): ");
+       const codigo = await sock.requestPairingCode(numero.trim());
+       console.log(`\n🔑 CÓDIGO DE VINCULACIÓN: ${codigo}\n`);
+   }
         const codigo = await sock.requestPairingCode(numero.trim());
         console.log(`\n🔑 CÓDIGO DE VINCULACIÓN: ${codigo}\n`);
     }
