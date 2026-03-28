@@ -5,17 +5,17 @@ termux-wake-lock
 pkg update -y && pkg upgrade -y
 pkg install -y git nodejs-lts python ffmpeg libsqlite openssl wget
 mkdir -p datos_ia sesion_bot
-npm install @whiskeysockets/baileys pino readline axios node-cron
+npm install @whiskeysockets/baileys pino headline axios node-cron
 
 cat << 'EOF' > bot_metal.js
-const { default: makeWASocket, useMultiFileAuthState, delay, fetchLatestBaileysVersion, DisconnectReason } = require("@whiskeysockets/baileys");
+const { default: makeWASocket, useMultiFileAuthState, delay, fetchLatestBaileysVersion, DisconnectReason, generateWAMessageFromContent, prepareWAMessageMedia } = require("@whiskeysockets/baileys");
 const pino = require("pino");
-const readline = require("readline");
+const headline = require("readline");
 const axios = require("axios");
 const fs = require("fs");
 const cron = require("node-cron");
 
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const rl = headline.createInterface({ input: process.stdin, output: process.stdout });
 const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 const CONFIG_PATH = "./datos_ia/config.json";
 const AGENDA_PATH = "./datos_ia/agenda.json";
@@ -32,27 +32,23 @@ const obtenerBandera = (pais) => {
         "inglaterra": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "grecia": "🇬🇷", "greece": "🇬🇷", "francia": "🇫🇷", "france": "🇫🇷",
         "italia": "🇮🇹", "italy": "🇮🇹", "espana": "🇪🇸", "spain": "🇪🇸", "canada": "🇨🇦", "australia": "🇦🇺",
         "argentina": "🇦🇷", "chile": "🇨🇱", "colombia": "🇨🇴", "polonia": "🇵🇱", "poland": "🇵🇱", "japon": "🇯🇵",
-        "holanda": "🇳🇱", "paises bajos": "🇳🇱", "belgica": "🇧🇪", "suiza": "🇨🇭", "austria": "🇦🇹", "ucrania": "🇺🇦",
-        "chequia": "🇨🇿", "republica checa": "🇨🇿", "checoslovaquia": "🇨🇿", "afganistan": "🇦🇫", "panama": "🇵🇦"
+        "chequia": "🇨🇿", "republica checa": "🇨🇿", "afganistan": "🇦🇫", "panama": "🇵🇦"
     };
     return banderas[p] || "🌐";
 };
 
-// --- MEMORIA DE NO REPETICIÓN ---
+// --- MEMORIA DE NO REPETICIÓN (SIN TOCAR NÚCLEO) ---
 function obtenerVariedad(lista, clave) {
     if (!fs.existsSync(MEMORIA_PATH)) fs.writeFileSync(MEMORIA_PATH, "{}");
     let memoria = JSON.parse(fs.readFileSync(MEMORIA_PATH));
     let ultima = memoria[clave] || "";
-    
     let disponible = lista.filter(item => item !== ultima);
     let elegida = disponible[Math.floor(Math.random() * disponible.length)];
-    
     memoria[clave] = elegida;
     fs.writeFileSync(MEMORIA_PATH, JSON.stringify(memoria));
     return elegida;
 }
 
-// --- PERSISTENCIA Y CONFIG ---
 function obtenerConfig() {
     if (!fs.existsSync(CONFIG_PATH)) return {};
     return JSON.parse(fs.readFileSync(CONFIG_PATH));
@@ -66,16 +62,15 @@ function guardarConfig(data) {
 async function sincronizarAgenda(url) {
     if (!url) return;
     try {
-        console.log("📥 [8:00 AM] Sincronizando con Google Sheets...");
         const { data } = await axios.get(url);
         fs.writeFileSync(AGENDA_PATH, JSON.stringify(data, null, 2));
+        console.log("✅ Sincronización Exitosa con Google Sheets");
         return data;
     } catch (e) {
         return fs.existsSync(AGENDA_PATH) ? JSON.parse(fs.readFileSync(AGENDA_PATH)) : [];
     }
 }
 
-// --- INICIO DEL BOT ---
 async function iniciar() {
     const { state, saveCreds } = await useMultiFileAuthState('sesion_bot');
     const { version } = await fetchLatestBaileysVersion();
@@ -93,35 +88,37 @@ async function iniciar() {
     sock.ev.on("connection.update", async (up) => {
         const { connection, lastDisconnect } = up;
         if (connection === "open") {
-            console.log("\n✅ SISTEMA METAL DESPLEGADO (SIN REPETICIÓN)");
+            console.log("\n🤘 SISTEMA METAL CONECTADO Y BLINDADO");
             let config = obtenerConfig();
+            
+            if (config.idCanal) console.log(`📢 CANAL ACTIVO: ${config.idCanal}`);
 
-            if (!fs.existsSync(AGENDA_PATH) && config.urlGoogle) await sincronizarAgenda(config.urlGoogle);
+            sock.ev.on("messages.upsert", async (m) => {
+                const msg = m.messages[0];
+                if (!msg.message) return;
+                const jid = msg.key.remoteJid;
 
-            if (!config.idCanal) {
-                const mensajeHandler = async (m) => {
-                    const msg = m.messages[0];
-                    if (msg.key.remoteJid.endsWith("@newsletter")) {
-                        const realID = msg.key.remoteJid;
-                        guardarConfig({ idCanal: realID });
-                        if (!config.urlGoogle) {
-                            const url = await question("\n👉 URL App Script: ");
-                            guardarConfig({ urlGoogle: url.trim() });
-                            await sincronizarAgenda(url.trim());
-                        }
-                        sock.ev.off("messages.upsert", mensajeHandler);
+                // MOSTRAR ID SIEMPRE (RESTAURADO)
+                if (jid.endsWith("@newsletter")) {
+                    console.log(`🆔 ID DEL CANAL DETECTADO: ${jid}`);
+                    if (!config.idCanal) {
+                        guardarConfig({ idCanal: jid });
+                        console.log("✅ ID Guardado Correctamente.");
                     }
-                };
-                sock.ev.on("messages.upsert", mensajeHandler);
+                }
+            });
+
+            if (!config.urlGoogle) {
+                const url = await question("\n🔗 URL App Script: ");
+                guardarConfig({ urlGoogle: url.trim() });
+                await sincronizarAgenda(url.trim());
             }
 
-            // CRON 8:00 AM
             cron.schedule('0 8 * * *', async () => {
                 const conf = obtenerConfig();
                 await sincronizarAgenda(conf.urlGoogle);
             });
 
-            // CRON PUBLICACIÓN
             cron.schedule('* * * * *', async () => {
                 const conf = obtenerConfig();
                 if (!fs.existsSync(AGENDA_PATH) || !conf.idCanal) return;
@@ -133,14 +130,24 @@ async function iniciar() {
 
                 for (const item of agenda) {
                     if (item.horario === ahora) {
+                        console.log(`🚀 Procesando envío para: ${item.banda}`);
                         await sock.sendPresenceUpdate('composing', conf.idCanal);
                         
-                        // Diccionarios de Variedad (Sin Emojis internos)
-                        const titulos = ["NUEVO ESTRENO", "NOTICIA METALERA", "BRUTAL LANZAMIENTO", "METAL ALERT", "NOVEDAD RECOMENDADA", "ESTRENO ABSOLUTO", "DEVASTACION SONORA"];
-                        const etiquetasBanda = ["Banda", "Grupo", "Artista", "Proyecto", "Horda", "Alineacion"];
-                        const etiquetasOrigen = ["Origen", "Desde", "Procedencia", "Nacionalidad", "Ubicacion"];
-                        const guiasVideo = ["Mira el video oficial aqui", "Disfruta del estreno en este enlace", "Dale play al nuevo material", "Conoce el video aqui abajo"];
-                        const emojis = ["🤘", "🔥", "🎸", "💀", "⚡", "🥁", "🌑", "⛓️"];
+                        // Lógica de YouTube Protegida
+                        const urlYT = item.youtube || "";
+                        const videoID = urlYT.includes('v=') ? urlYT.split('v=')[1].split('&')[0] : 
+                                      urlYT.includes('youtu.be/') ? urlYT.split('youtu.be/')[1].split('?')[0] : "";
+                        
+                        if (!videoID) {
+                            console.log("❌ Error: No se pudo extraer ID de YouTube para " + item.banda);
+                            continue;
+                        }
+
+                        const titulos = ["NUEVO ESTRENO", "NOTICIA METALERA", "BRUTAL LANZAMIENTO", "METAL ALERT", "ESTRENO ABSOLUTO"];
+                        const etiquetasBanda = ["Banda", "Grupo", "Artista", "Proyecto"];
+                        const etiquetasOrigen = ["Origen", "Desde", "Procedencia", "Nacionalidad"];
+                        const guiasVideo = ["Mira el video oficial aqui", "Disfruta del estreno en este enlace", "Dale play al nuevo material"];
+                        const emojis = ["🤘", "🔥", "🎸", "💀", "⚡", "🥁"];
 
                         const tituloElegido = obtenerVariedad(titulos, "tit");
                         const bandaElegida = obtenerVariedad(etiquetasBanda, "bnd");
@@ -149,28 +156,31 @@ async function iniciar() {
                         const emo1 = obtenerVariedad(emojis, "e1");
                         const emo2 = obtenerVariedad(emojis, "e2");
                         
-                        const bandera = obtenerBandera(item.tracks); // Celda de País
-                        const videoID = (item.youtube.split('v=')[1] || "").split('&')[0];
-                        const imgUrl = `https://img.youtube.com/vi/${videoID}/hqdefault.jpg`;
+                        const bandera = obtenerBandera(item.tracks);
+                        const imgUrl = `https://img.youtube.com/vi/${videoID}/maxresdefault.jpg`;
 
-                        // 1. ENVIAR IMAGEN PURA (FOTO)
-                        await sock.sendMessage(conf.idCanal, { 
-                            image: { url: imgUrl }, 
-                            caption: null 
-                        });
-
-                        await delay(4000); // Pausa breve entre imagen y texto
-
-                        // 2. ENVIAR CUERPO DE TEXTO (JERARQUÍA Y TRIPLE ESPACIO)
                         const cuerpo = `${emo1} *${tituloElegido}*\n\n\n` +
                                        `👇 *${guiaElegida}:*\n` +
                                        `${item.youtube}\n\n` +
                                        `${emo2} *${bandaElegida}:* ${item.banda}\n` +
                                        `${bandera} *${origenElegido}:* ${item.tracks}`;
 
-                        await sock.sendMessage(conf.idCanal, { text: cuerpo });
-                        
-                        await delay(10000); // Tiempo total para simular humano
+                        // ENVÍO DE IMAGEN CON PREVISUALIZACIÓN GRANDE (RESTAURADO)
+                        await sock.sendMessage(conf.idCanal, { 
+                            image: { url: imgUrl },
+                            caption: cuerpo,
+                            contextInfo: {
+                                externalAdReply: {
+                                    title: item.banda,
+                                    body: "YouTube Video",
+                                    mediaType: 1,
+                                    sourceUrl: item.youtube,
+                                    thumbnailUrl: imgUrl
+                                }
+                            }
+                        });
+
+                        await delay(5000);
                         await sock.sendPresenceUpdate('paused', conf.idCanal);
                     }
                 }
