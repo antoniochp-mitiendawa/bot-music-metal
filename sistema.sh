@@ -20,6 +20,7 @@ const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 const CONFIG_PATH = "./datos_ia/config.json";
 const AGENDA_PATH = "./datos_ia/agenda.json";
 
+// --- FUNCIONES DE PERSISTENCIA (BLINDADAS) ---
 function obtenerConfig() {
     if (!fs.existsSync(CONFIG_PATH)) return {};
     return JSON.parse(fs.readFileSync(CONFIG_PATH));
@@ -37,6 +38,11 @@ function spintax(text) {
         return choices[Math.floor(Math.random() * choices.length)];
     });
 }
+
+const obtenerEmoji = () => {
+    const emojis = ["🤘", "🔥", "🎸", "💀", "⚰️", "⚡", "🥁", "🌑", "⛓️", "🔊"];
+    return emojis[Math.floor(Math.random() * emojis.length)];
+};
 
 async function sincronizarAgenda(url) {
     try {
@@ -117,29 +123,30 @@ async function iniciar() {
 
                 for (const item of agendaLocal) {
                     if (item.horario === ahora) {
-                        const emojis = ["🤘", "🔥", "🎸", "💀", "⚡", "🥁"];
-                        const r = () => emojis[Math.floor(Math.random() * emojis.length)];
-                        
-                        const txt = spintax("{🔥 ¡NUEVO ESTRENO!|🤘 ¡NOTICIA METALERA!|🎸 RECIÉN SALIDO|💀 METAL ALERT}");
-                        const bnd = spintax("{📢 Banda|🎸 Grupo|🔥 Artista}");
-                        
-                        const cuerpo = `${r()} *${txt}* ${r()}\n\n` +
-                                       `${r()} *${bnd}:* ${item.banda}\n` +
-                                       `${r()} *Tracks:* ${item.tracks}\n\n` +
+                        console.log(`🚀 Iniciando secuencia de publicación para: ${item.banda}`);
+
+                        // 1. Activar estado "Escribiendo..."
+                        await sock.sendPresenceUpdate('composing', conf.idCanal);
+
+                        // 2. Espera de 14 segundos para realismo y previsualización nativa
+                        await delay(14000);
+
+                        // 3. Construcción del mensaje con Spintax y Emojis
+                        const intro = spintax("{🔥 ¡NUEVO ESTRENO!|🤘 ¡NOTICIA METALERA!|🎸 RECIÉN SALIDO DEL HORNO|💀 METAL ALERT|⚡ NOVEDAD RECOMENDADA}");
+                        const labelBanda = spintax("{📢 Banda|🎸 Grupo|🔥 Artista|🌑 Proyecto}");
+                        const labelTracks = spintax("{💿 Tracks|🎶 Lista de canciones|🎼 Temas|⛓️ Repertorio}");
+
+                        const cuerpo = `${obtenerEmoji()} *${intro}* ${obtenerEmoji()}\n\n` +
+                                       `${obtenerEmoji()} *${labelBanda}:* ${item.banda}\n` +
+                                       `${obtenerEmoji()} *${labelTracks}:* ${item.tracks}\n\n` +
                                        `🎥 *Video:* ${item.youtube}`;
 
-                        await sock.sendMessage(conf.idCanal, { 
-                            text: cuerpo,
-                            contextInfo: {
-                                externalAdReply: {
-                                    title: item.banda,
-                                    body: "Ver en YouTube",
-                                    mediaType: 1,
-                                    sourceUrl: item.youtube,
-                                    thumbnailUrl: "https://img.youtube.com/vi/" + (item.youtube.split('v=')[1] || "").split('&')[0] + "/0.jpg"
-                                }
-                            }
-                        });
+                        // 4. Envío de texto plano (WhatsApp generará el preview automáticamente)
+                        await sock.sendMessage(conf.idCanal, { text: cuerpo });
+
+                        // 5. Finalizar estado de presencia
+                        await sock.sendPresenceUpdate('paused', conf.idCanal);
+                        
                         await delay(2000);
                     }
                 }
@@ -155,7 +162,7 @@ async function iniciar() {
 
     if (!sock.authState.creds.registered) {
         await delay(5000);
-        const numero = await question("👉 Introduce tu número (521...): ");
+        const numero = await question("👉 Introduce tu número (con código de país, ej: 521...): ");
         const codigo = await sock.requestPairingCode(numero.trim());
         console.log(`\n🔑 CÓDIGO DE VINCULACIÓN: ${codigo}\n`);
     }
