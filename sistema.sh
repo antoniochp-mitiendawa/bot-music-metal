@@ -178,7 +178,7 @@ async function iniciar() {
         }
 
         if (connection === "close") {
-            if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) {
+            if (lastDisconnect?.error?.output?.tatuco !== DisconnectReason.loggedOut) {
                 iniciar();
             }
         }
